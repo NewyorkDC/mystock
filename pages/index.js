@@ -291,7 +291,7 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
         const aT=stocks.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
         const aB=stocks.reduce((a,s)=>s.buyPrice&&s.qty?a+toKrw(s.buyPrice*s.qty,s.currency||"KRW"):a,0);
         const aPnl=aT-aB,aR=aB>0?aPnl/aB*100:0,open=expanded===acc.id,col=COLORS[ai%COLORS.length];
-        const stockDrag=useDrag(stocks,ns=>setAccounts(accounts.map(a=>a.id===acc.id?{...a,stocks:ns}:a)));
+        // stockDrag moved to StockList component to avoid hook-in-loop violation
         return(
           <div key={acc.id} {...db} style={{...db.style,background:SUR,border:`1px solid ${BOR}`,borderRadius:16,marginBottom:12,overflow:"hidden"}}>
             <div onClick={()=>setExpanded(open?null:acc.id)} style={{padding:"16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
@@ -309,11 +309,10 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
             {open&&(
               <div style={{borderTop:`1px solid ${BOR}`}}>
                 {stocks.map((s,si)=>{
-                  const sb=stockDrag(si);
                   const rate=s.currentPrice&&s.buyPrice?(s.currentPrice-s.buyPrice)/s.buyPrice*100:null;
                   const asset=s.currentPrice&&s.qty?s.currentPrice*s.qty:null;
                   return(
-                    <div key={s.id} {...sb} style={{...sb.style,padding:"12px 16px",borderBottom:`1px solid rgba(36,40,54,.5)`,display:"flex",alignItems:"center",gap:8,borderRadius:0}}>
+                    <div key={s.id} style={{padding:"12px 16px",borderBottom:`1px solid rgba(36,40,54,.5)`,display:"flex",alignItems:"center",gap:8,borderRadius:0}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:15,fontWeight:500,color:TEXT,marginBottom:2}}>{s.name}</div>
                         <div style={{fontSize:11,color:MUTED,fontFamily:"monospace",display:"flex",gap:6,flexWrap:"wrap"}}>
