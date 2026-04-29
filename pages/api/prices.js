@@ -23,8 +23,19 @@ async function fetchUS(ticker) {
 
 async function fetchUsdKrw() {
   try {
+    // 네이버 금융 환율 API (실시간)
+    const r = await fetch("https://m.stock.naver.com/api/stock/FX_USDKRW/basic", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (r.ok) {
+      const d = await r.json();
+      const price = parseFloat((d.closePrice || d.currentPrice || "").replace(/,/g, ""));
+      if (price > 100) return Math.round(price * 100) / 100;
+    }
+  } catch {}
+  try {
     const r = await fetch(`https://finnhub.io/api/v1/forex/rates?base=USD&token=${FINNHUB_KEY}`);
-    if (r.ok) { const d = await r.json(); if (d.quote?.KRW > 100) return Math.round(d.quote.KRW); }
+    if (r.ok) { const d = await r.json(); if (d.quote?.KRW > 100) return Math.round(d.quote.KRW * 100) / 100; }
   } catch {}
   return 1450;
 }
