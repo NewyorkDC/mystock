@@ -244,6 +244,49 @@ function StockModal({stock,onClose,onSave,customSectors=[]}){
   );
 }
 
+
+// ── 종목 목록 (드래그 포함 — 훅을 루프 밖에서 호출하기 위해 별도 컴포넌트)
+function StockList({stocks,accId,accounts,setAccounts,confirmDel,setConfirmDel,setStockModal,toKrw,usdKrw}){
+  const stockDrag=useDrag(stocks,ns=>setAccounts(accounts.map(a=>a.id===accId?{...a,stocks:ns}:a)));
+  function delStock(sid){setAccounts(accounts.map(a=>a.id!==accId?a:{...a,stocks:(a.stocks||[]).filter(s=>s.id!==sid)}));setConfirmDel(null);}
+  return(
+    <>
+      {stocks.map((s,si)=>{
+        const sb=stockDrag(si);
+        const rate=s.currentPrice&&s.buyPrice?(s.currentPrice-s.buyPrice)/s.buyPrice*100:null;
+        const asset=s.currentPrice&&s.qty?s.currentPrice*s.qty:null;
+        return(
+          <div key={s.id} {...sb} style={{...sb.style,padding:"12px 16px",borderBottom:`1px solid rgba(36,40,54,.5)`,display:"flex",alignItems:"center",gap:8,borderRadius:0}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:15,fontWeight:500,color:TEXT,marginBottom:2}}>{s.name}</div>
+              <div style={{fontSize:11,color:MUTED,fontFamily:"monospace",display:"flex",gap:6,flexWrap:"wrap"}}>
+                <span>매수 {Number(s.buyPrice).toLocaleString()}</span>
+                {s.qty>0&&<span>{s.qty}주</span>}
+                {s.ticker&&<span style={{color:ACC}}>{s.ticker}</span>}
+              </div>
+              {asset!=null&&<div style={{fontSize:11,color:ACC,fontFamily:"monospace",marginTop:1}}>평가 {asset.toLocaleString(undefined,{maximumFractionDigits:0})} {s.currency}</div>}
+              {s.memo&&<div style={{fontSize:11,color:"#4a5470",marginTop:3,lineHeight:1.5,whiteSpace:"pre-wrap"}}>📝 {s.memo}</div>}
+            </div>
+            <div style={{textAlign:"right",flexShrink:0,marginRight:8}}>
+              {s.currentPrice?<div style={{fontFamily:"monospace",fontSize:14,fontWeight:700,color:TEXT,marginBottom:3}}>{s.currentPrice.toLocaleString(undefined,{maximumFractionDigits:2})} <span style={{fontSize:10,color:MUTED}}>{s.currency}</span></div>:<div style={{fontSize:12,color:MUTED,marginBottom:3}}>조회 전</div>}
+              {rate!=null?<span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,padding:"2px 7px",borderRadius:5,background:rate>0?"rgba(38,192,106,.15)":"rgba(240,64,96,.15)",color:rate>0?UP:DOWN}}>{rate>0?"+":""}{rate.toFixed(2)}%</span>:<span style={{fontSize:12,padding:"2px 7px",borderRadius:5,background:SUR2,color:MUTED}}>—</span>}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {confirmDel?.sid===s.id?(
+                <><button onClick={()=>delStock(s.id)} style={{padding:"3px 8px",borderRadius:7,border:"none",background:DOWN,color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>삭제</button>
+                <button onClick={()=>setConfirmDel(null)} style={{padding:"3px 8px",borderRadius:7,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:11}}>취소</button></>
+              ):(
+                <><button onClick={e=>{e.stopPropagation();setStockModal({accId,stock:s});}} style={{width:26,height:26,borderRadius:7,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+                <button onClick={e=>{e.stopPropagation();setConfirmDel({sid:s.id});}} style={{width:26,height:26,borderRadius:7,border:"1px solid rgba(240,64,96,.4)",background:"rgba(240,64,96,.1)",color:DOWN,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 // ── 탭3: 계좌
 function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
   const [showAdd,setShowAdd]=useState(false);
@@ -251,8 +294,11 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
   const [expanded,setExpanded]=useState(null);
   const [stockModal,setStockModal]=useState(null);
   const [confirmDel,setConfirmDel]=useState(null);
+  const [editAccId,setEditAccId]=useState(null);
+  const [editAccName,setEditAccName]=useState("");
   const [toast,setToast]=useState("");
   function showToast(m){setToast(m);setTimeout(()=>setToast(""),2500);}
+  function renameAcc(id,name){if(!name.trim())return;setAccounts(accounts.map(a=>a.id===id?{...a,name:name.trim()}:a));setEditAccId(null);showToast("계좌명이 수정됐어요 ✓");}
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const customSectors=[...new Set(accounts.flatMap(a=>(a.stocks||[]).map(s=>s.sector)).filter(s=>s&&!DEFAULT_SECTORS.includes(s)))];
   const accDrag=useDrag(accounts,setAccounts);
@@ -297,8 +343,19 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
             <div onClick={()=>setExpanded(open?null:acc.id)} style={{padding:"16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
               <div style={{width:10,height:10,borderRadius:"50%",background:col,flexShrink:0}}/>
               <div style={{flex:1}}>
-                <div style={{fontSize:16,fontWeight:600,color:TEXT,marginBottom:2}}>{acc.name}</div>
-                <div style={{fontSize:11,color:MUTED}}>{stocks.length}종목</div>
+                {editAccId===acc.id?(
+                  <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6}}>
+                    <input value={editAccName} onChange={e=>setEditAccName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&renameAcc(acc.id,editAccName)} style={{flex:1,background:BG,border:`1px solid ${ACC}`,borderRadius:8,color:TEXT,fontSize:14,padding:"4px 8px",fontFamily:"inherit",outline:"none"}} autoFocus/>
+                    <button onClick={()=>renameAcc(acc.id,editAccName)} style={{padding:"4px 10px",borderRadius:8,border:"none",background:ACC,color:"#fff",cursor:"pointer",fontSize:12}}>✓</button>
+                    <button onClick={()=>setEditAccId(null)} style={{padding:"4px 8px",borderRadius:8,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:12}}>✕</button>
+                  </div>
+                ):(
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{fontSize:16,fontWeight:600,color:TEXT}}>{acc.name}</div>
+                    <button onClick={e=>{e.stopPropagation();setEditAccId(acc.id);setEditAccName(acc.name);}} style={{width:20,height:20,borderRadius:5,border:`1px solid ${BOR}`,background:"transparent",color:MUTED,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+                  </div>
+                )}
+                <div style={{fontSize:11,color:MUTED,marginTop:2}}>{stocks.length}종목</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:16,fontFamily:"monospace",fontWeight:700,color:TEXT}}>{aT>0?"₩"+Math.round(aT).toLocaleString():"—"}</div>
