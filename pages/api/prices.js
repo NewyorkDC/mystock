@@ -22,17 +22,21 @@ async function fetchUS(ticker) {
 }
 
 async function fetchUsdKrw() {
-  try {
-    // 네이버 금융 환율 API (실시간)
-    const r = await fetch("https://m.stock.naver.com/api/stock/FX_USDKRW/basic", {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-    if (r.ok) {
-      const d = await r.json();
-      const price = parseFloat((d.closePrice || d.currentPrice || "").replace(/,/g, ""));
-      if (price > 100) return Math.round(price * 100) / 100;
-    }
-  } catch {}
+  // Yahoo Finance로 USD/KRW 환율 조회
+  const urls = [
+    "https://query1.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d",
+    "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d",
+  ];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+      if (r.ok) {
+        const d = await r.json();
+        const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if (price && price > 100) return Math.round(price * 100) / 100;
+      }
+    } catch {}
+  }
   try {
     const r = await fetch(`https://finnhub.io/api/v1/forex/rates?base=USD&token=${FINNHUB_KEY}`);
     if (r.ok) { const d = await r.json(); if (d.quote?.KRW > 100) return Math.round(d.quote.KRW * 100) / 100; }
