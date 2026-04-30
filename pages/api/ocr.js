@@ -10,6 +10,8 @@ export default async function handler(req, res) {
   if (!imageBase64) return res.status(400).json({ error: "이미지가 없어요" });
 
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY || "";
+    console.log("API key present:", apiKey.length > 0, "length:", apiKey.length);
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -49,7 +51,8 @@ JSON 배열만 반환하세요. 마크다운 없이 순수 JSON만.
 
     if (!response.ok) {
       const err = await response.text();
-      return res.status(500).json({ error: "API 오류: " + err.slice(0, 100) });
+      console.error("Anthropic API error:", response.status, err);
+      return res.status(500).json({ error: "API 오류 " + response.status + ": " + err.slice(0, 200) });
     }
 
     const data = await response.json();
