@@ -104,12 +104,10 @@ const DEFAULT_MARKET_ITEMS=[
   {id:"usdkrw",label:"원/달러",key:"usdkrw"},
 ];
 
-function MarketBar({usdKrw,setUsdKrw}){
+function MarketBar({usdKrw,setUsdKrw,marketItems,setMarketItems}){
   const[data,setData]=useState({});
   const[loading,setLoading]=useState(false);
-  const[items,setItems]=useState(()=>{
-    try{const s=localStorage.getItem("marketItems");return s?JSON.parse(s):DEFAULT_MARKET_ITEMS;}catch{return DEFAULT_MARKET_ITEMS;}
-  });
+  const items=marketItems||DEFAULT_MARKET_ITEMS;
   const[showAdd,setShowAdd]=useState(false);
   const[newLabel,setNewLabel]=useState("");
   const[newTicker,setNewTicker]=useState("");
@@ -151,22 +149,27 @@ function MarketBar({usdKrw,setUsdKrw}){
     setLoading(false);
   }
 
-  useEffect(()=>{fetchMarket();},[]);
+  useEffect(()=>{fetchMarket();},[items.length]);
+
+  async function saveItems(updated){
+    setMarketItems(updated);
+    try{
+      await fetch("/api/portfolio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({marketItems:updated})});
+    }catch{}
+  }
 
   function addItem(){
     if(!newLabel.trim())return;
     const newItem={id:makeId(),label:newLabel.trim(),ticker:newTicker.trim()||null,key:newTicker.trim()||null};
     const updated=[...items,newItem];
-    setItems(updated);
-    localStorage.setItem("marketItems",JSON.stringify(updated));
+    saveItems(updated);
     setNewLabel("");setNewTicker("");setShowAdd(false);
     fetchMarket();
   }
 
   function removeItem(id){
     const updated=items.filter(i=>i.id!==id);
-    setItems(updated);
-    localStorage.setItem("marketItems",JSON.stringify(updated));
+    saveItems(updated);
   }
 
   const inp={background:BG,border:`1px solid ${BOR}`,borderRadius:10,color:TEXT,fontSize:14,padding:"10px 12px",width:"100%",fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
@@ -225,7 +228,7 @@ function MarketBar({usdKrw,setUsdKrw}){
 
 const MarketBarInDash=MarketBar;
 
-function DashTab({accounts,usdKrw,setUsdKrw,onRefresh,loading,updated}){
+function DashTab({accounts,usdKrw,setUsdKrw,onRefresh,loading,updated,marketItems,setMarketItems}){
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const allS=accounts.flatMap(a=>a.stocks||[]);
   const totalAsset=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
@@ -242,7 +245,7 @@ function DashTab({accounts,usdKrw,setUsdKrw,onRefresh,loading,updated}){
           <button onClick={onRefresh} disabled={loading} style={{fontSize:13,padding:"7px 16px",borderRadius:10,background:loading?"#1e2a3a":ACC,border:"none",color:"#fff",cursor:"pointer",opacity:loading?0.6:1,fontFamily:"inherit"}}><span style={loading?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span>{" "}{loading?"조회중":"시세 조회"}</button>
         </div>
       </div>
-      <MarketBarInDash usdKrw={usdKrw} setUsdKrw={setUsdKrw}/>
+      <MarketBarInDash usdKrw={usdKrw} setUsdKrw={setUsdKrw} marketItems={marketItems} setMarketItems={setMarketItems}/>
       {accounts.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:MUTED,marginTop:20}}><div style={{fontSize:40,marginBottom:12}}>📊</div><p style={{fontSize:14,lineHeight:1.8}}>계좌 탭에서 계좌를 추가하고<br/>종목을 입력해주세요</p></div>}
     </div>
   );
@@ -933,6 +936,7 @@ export default function App(){
   const[syncing,setSyncing]=useState(false);
   const[updated,setUpdated]=useState("");
   const[toast,setToast]=useState("");
+  const[marketItems,setMarketItems]=useState(null);
   const saveTimer=useRef(null);
   const historyRef=useRef([]);
   const accountsRef=useRef([]);
@@ -944,6 +948,7 @@ export default function App(){
       fetch("/api/portfolio").then(r=>r.json()).then(d=>{
         if(d.accounts){setAccountsRaw(d.accounts);accountsRef.current=d.accounts;}
         if(d.history){setHistory(d.history);historyRef.current=d.history;}
+        if(d.marketItems){setMarketItems(d.marketItems);}
       });
     }
   },[status]);
@@ -1019,7 +1024,7 @@ export default function App(){
           </div>
           {tab!=="admin"&&<TabBar tab={tab} setTab={setTab}/>}
         </div>
-        {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} setUsdKrw={setUsdKrw} onRefresh={refresh} loading={loading} updated={updated}/>}
+        {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} setUsdKrw={setUsdKrw} onRefresh={refresh} loading={loading} updated={updated} marketItems={marketItems} setMarketItems={setMarketItems}/>}
         {tab==="history"&&<HistoryTab history={history} accounts={accounts} usdKrw={usdKrw}/>}
         {tab==="chart"&&<ChartTab accounts={accounts}/>}
         {tab==="accounts"&&<AccountsTab accounts={accounts} setAccounts={setAccounts} usdKrw={usdKrw} onRefresh={refresh} loading={loading}/>}
