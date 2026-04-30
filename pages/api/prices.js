@@ -10,7 +10,19 @@ async function fetchKR(ticker) {
   const d = await res.json();
   const price = parseFloat((d.closePrice || d.currentPrice || "").replace(/,/g, ""));
   if (!price) throw new Error("price parse fail");
-  return { price, currency: "KRW" };
+
+  // 등락률: 네이버 API에서 compareToPreviousClosePrice 또는 fluctuationsRatio 사용
+  const prevPrice = parseFloat((d.compareToPreviousClosePrice || "").replace(/,/g, ""));
+  const changePercent = prevPrice
+    ? (prevPrice / price) * 100  // compareToPreviousClosePrice는 변동액이므로
+    : parseFloat((d.fluctuationsRatio || "0").replace(/,/g, ""));
+
+  // fluctuationsRatio가 있으면 그걸 우선 사용
+  const pctRaw = parseFloat((d.fluctuationsRatio || "0").replace(/[^0-9.\-]/g, ""));
+  const sign = (d.compareToPreviousPrice?.code === "2" || d.changeType === "RISE") ? 1
+    : (d.compareToPreviousPrice?.code === "5" || d.changeType === "FALL") ? -1 : 0;
+
+  return { price, currency: "KRW", changePercent: pctRaw * sign };
 }
 
 async function fetchUS(ticker) {
@@ -18,7 +30,11 @@ async function fetchUS(ticker) {
   if (!res.ok) throw new Error(`Finnhub ${res.status}`);
   const d = await res.json();
   if (!d.c || d.c === 0) throw new Error("no price");
-  return { price: d.c, currency: "USD" };
+
+  // d.c = 현재가, d.pc = 전일종가
+  const changePercent = d.pc && d.pc !== 0 ? ((d.c - d.pc) / d.pc) * 100 : 0;
+
+  return { price: d.c, currency: "USD", changePercent: Math.round(changePercent * 100) / 100 };
 }
 
 async function fetchUsdKrw() {
@@ -61,7 +77,7 @@ export default async function handler(req, res) {
     const r = priceResults[i];
     return r.status === "fulfilled"
       ? { ticker, ...r.value, error: null }
-      : { ticker, price: null, currency: ticker.includes(".K") ? "KRW" : "USD", error: r.reason?.message };
+      : { ticker, price: null, changePercent: null, currency: ticker.includes(".K") ? "KRW" : "USD", error: r.reason?.message };
   });
 
   res.status(200).json({ prices, usdKrw });
