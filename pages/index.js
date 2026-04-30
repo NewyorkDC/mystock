@@ -370,12 +370,14 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
 
 
 // ── 티커 → TradingView 심볼 변환
+// NYSE 종목들
+const NYSE_TICKERS=new Set(["TSM","BRK.A","BRK.B","JPM","BAC","XOM","CVX","JNJ","PG","KO","PEP","WMT","V","MA","UNH","HD","MRK","ABBV","PFE","LLY","TMO","ABT","DHR","BMY","AMGN","COST","NEE","ACN","TXN","NKE","PM","RTX","HON","IBM","CAT","GE","MMM","MCD","WFC","C","GS","MS","AXP","BLK","SCHW","USB","PNC","TFC","COF","AIG","MET","PRU","ALL","TRV","AFL","PL"]);
 function toTVSymbol(ticker){
   if(!ticker)return null;
   if(ticker.endsWith(".KS"))return"KRX:"+ticker.replace(".KS","");
   if(ticker.endsWith(".KQ"))return"KOSDAQ:"+ticker.replace(".KQ","");
-  // 미국주식 (TSM, AAPL 등)
-  return"NASDAQ:"+ticker;
+  if(NYSE_TICKERS.has(ticker.toUpperCase()))return"NYSE:"+ticker.toUpperCase();
+  return"NASDAQ:"+ticker.toUpperCase();
 }
 
 // ── 개별 차트 카드 (TradingView mini widget)
