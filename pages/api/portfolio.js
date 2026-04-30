@@ -7,20 +7,30 @@ export default async function handler(req, res) {
   const session = await getServerSession(req, res, authOptions);
   if (!session) return res.status(401).json({ error: "로그인이 필요해요." });
   const userId = session.user.id;
-
   const client = await clientPromise;
   const db = client.db("mystock");
 
   if (req.method === "GET") {
     const doc = await db.collection("portfolios").findOne({ userId });
-    return res.status(200).json({ accounts: doc?.accounts || [], history: doc?.history || [] });
+    return res.status(200).json({
+      accounts: doc?.accounts || [],
+      history: doc?.history || [],
+      marketItems: doc?.marketItems || null,
+    });
   }
 
   if (req.method === "POST") {
-    const { accounts, history } = req.body;
+    const { accounts, history, marketItems } = req.body;
+    const update = {
+      userId,
+      accounts: accounts || [],
+      history: history || [],
+      updatedAt: new Date(),
+    };
+    if (marketItems !== undefined) update.marketItems = marketItems;
     await db.collection("portfolios").updateOne(
       { userId },
-      { $set: { userId, accounts: accounts || [], history: history || [], updatedAt: new Date() } },
+      { $set: update },
       { upsert: true }
     );
     return res.status(200).json({ ok: true });
