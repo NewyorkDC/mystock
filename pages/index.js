@@ -206,17 +206,51 @@ function MarketBar({usdKrw,setUsdKrw,marketItems,setMarketItems}){
         <div onClick={e=>e.target===e.currentTarget&&setShowAdd(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
           <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
             <div style={{fontSize:17,fontWeight:700,marginBottom:16}}>관심 항목 추가</div>
+            
+            {/* 프리셋 원자재/지수 리스트 */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:MUTED,marginBottom:8}}>빠른 선택</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {[
+                  {label:"금",ticker:"XAUUSD"},
+                  {label:"은",ticker:"XAGUSD"},
+                  {label:"구리",ticker:"XCUUSD"},
+                  {label:"우라늄",ticker:"URA"},
+                  {label:"천연가스",ticker:"NATGAS"},
+                  {label:"밀",ticker:"WHEAT"},
+                  {label:"옥수수",ticker:"CORN"},
+                  {label:"비트코인",ticker:"BTCUSD"},
+                  {label:"이더리움",ticker:"ETHUSD"},
+                  {label:"S&P500",ticker:"SPY"},
+                  {label:"다우존스",ticker:"DIA"},
+                  {label:"Russell2000",ticker:"IWM"},
+                  {label:"VIX",ticker:"VIX"},
+                  {label:"달러인덱스",ticker:"DXY"},
+                ].map(p=>(
+                  <button key={p.ticker} onClick={()=>{setNewLabel(p.label);setNewTicker(p.ticker);}} style={{
+                    padding:"6px 12px",borderRadius:20,fontSize:12,cursor:"pointer",fontFamily:"inherit",
+                    background:newTicker===p.ticker?"rgba(79,142,247,.25)":SUR2,
+                    border:`1px solid ${newTicker===p.ticker?ACC:BOR}`,
+                    color:newTicker===p.ticker?ACC:MUTED,
+                    transition:"all 0.15s",
+                  }}>{p.label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{height:1,background:BOR,marginBottom:14}}/>
+
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>이름 (예: 삼성전자, 금 등)</div>
+              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>이름</div>
               <input style={inp} value={newLabel} onChange={e=>setNewLabel(e.target.value)} placeholder="표시할 이름"/>
             </div>
             <div style={{marginBottom:4}}>
-              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>티커 심볼 (선택)</div>
-              <input style={inp} value={newTicker} onChange={e=>setNewTicker(e.target.value)} placeholder="AAPL, 005930.KS 등"/>
-              <div style={{fontSize:10,color:MUTED,marginTop:4}}>비워두면 기본 지수만 표시돼요</div>
+              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>티커 심볼</div>
+              <input style={inp} value={newTicker} onChange={e=>setNewTicker(e.target.value)} placeholder="AAPL, 005930.KS, XAUUSD 등"/>
+              <div style={{fontSize:10,color:MUTED,marginTop:4}}>거래소 없이 티커만 입력해도 자동으로 찾아요</div>
             </div>
             <div style={{display:"flex",gap:10,marginTop:16}}>
-              <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
+              <button onClick={()=>{setShowAdd(false);setNewLabel("");setNewTicker("");}} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
               <button onClick={addItem} style={{flex:2,padding:13,borderRadius:12,background:ACC,border:"none",color:"#fff",fontSize:14,cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>추가하기</button>
             </div>
           </div>
@@ -784,13 +818,15 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
   );
 }
 
-const NYSE_TICKERS=new Set(["TSM","BRK.A","BRK.B","JPM","BAC","XOM","CVX","JNJ","PG","KO","PEP","WMT","V","MA","UNH","HD","MRK","ABBV","PFE","LLY","TMO","ABT","DHR","BMY","AMGN","COST","NEE","ACN","TXN","NKE","PM","RTX","HON","IBM","CAT","GE","MMM","MCD","WFC","C","GS","MS","AXP","BLK","SCHW","USB","PNC","TFC","COF","AIG","MET","PRU","ALL","TRV","AFL","PL"]);
+// 티커만 입력하면 TradingView가 자동으로 거래소 찾게 함
 function toTVSymbol(ticker){
   if(!ticker)return null;
   if(ticker.endsWith(".KS"))return"KRX:"+ticker.replace(".KS","");
   if(ticker.endsWith(".KQ"))return"KOSDAQ:"+ticker.replace(".KQ","");
-  if(NYSE_TICKERS.has(ticker.toUpperCase()))return"NYSE:"+ticker.toUpperCase();
-  return"NASDAQ:"+ticker.toUpperCase();
+  // 거래소 prefix가 이미 있으면 그대로
+  if(ticker.includes(":"))return ticker.toUpperCase();
+  // 나머지는 TradingView가 자동 탐색 (거래소 없이 티커만)
+  return ticker.toUpperCase();
 }
 
 function ChartCard({stock}){
