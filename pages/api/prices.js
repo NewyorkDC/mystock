@@ -22,26 +22,28 @@ async function fetchUS(ticker) {
 }
 
 async function fetchUsdKrw() {
-  // Yahoo Finance로 USD/KRW 환율 조회
-  const urls = [
-    "https://query1.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d",
-    "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d",
-  ];
-  for (const url of urls) {
-    try {
-      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-      if (r.ok) {
-        const d = await r.json();
-        const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        if (price && price > 100) return Math.round(price * 100) / 100;
-      }
-    } catch {}
-  }
+  // 방법1: ExchangeRate-API (무료, CORS없음)
+  try {
+    const r = await fetch("https://open.er-api.com/v6/latest/USD");
+    if (r.ok) {
+      const d = await r.json();
+      if (d.rates?.KRW > 100) return Math.round(d.rates.KRW * 100) / 100;
+    }
+  } catch {}
+  // 방법2: Frankfurter API
+  try {
+    const r = await fetch("https://api.frankfurter.app/latest?from=USD&to=KRW");
+    if (r.ok) {
+      const d = await r.json();
+      if (d.rates?.KRW > 100) return Math.round(d.rates.KRW * 100) / 100;
+    }
+  } catch {}
+  // 방법3: Finnhub
   try {
     const r = await fetch(`https://finnhub.io/api/v1/forex/rates?base=USD&token=${FINNHUB_KEY}`);
     if (r.ok) { const d = await r.json(); if (d.quote?.KRW > 100) return Math.round(d.quote.KRW * 100) / 100; }
   } catch {}
-  return 1450;
+  return 1478;
 }
 
 export default async function handler(req, res) {
