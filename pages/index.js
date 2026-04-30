@@ -44,7 +44,7 @@ function Toast({msg}){
 }
 
 function TabBar({tab,setTab}){
-  const tabs=[{id:"dash",label:"자산홈"},{id:"history",label:"추이"},{id:"chart",label:"차트"},{id:"accounts",label:"계좌"}];
+  const tabs=[{id:"dash",label:"자산홈"},{id:"history",label:"자산분석"},{id:"chart",label:"차트"},{id:"accounts",label:"계좌"}];
   return(
     <div style={{background:SUR,borderBottom:`1px solid ${BOR}`,display:"flex",overflowX:"auto",scrollbarWidth:"none"}}>
       <style>{`.tab-scroll::-webkit-scrollbar{display:none}`}</style>
@@ -220,7 +220,8 @@ function MarketBar({usdKrw,setUsdKrw}){
 }
 
 
-function DashTab({accounts,usdKrw,onRefresh,loading,updated}){
+const MarketBarInDash=MarketBar;
+function DashTab({accounts,usdKrw,setUsdKrw,onRefresh,loading,updated}){
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const allS=accounts.flatMap(a=>a.stocks||[]);
   const totalAsset=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
@@ -239,9 +240,9 @@ function DashTab({accounts,usdKrw,onRefresh,loading,updated}){
           <button onClick={onRefresh} disabled={loading} style={{fontSize:13,padding:"7px 16px",borderRadius:10,background:loading?"#1e2a3a":ACC,border:"none",color:"#fff",cursor:"pointer",opacity:loading?0.6:1,fontFamily:"inherit"}}><span style={loading?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span>{" "}{loading?"조회중":"시세 조회"}</button>
         </div>
       </div>
-      {accSlices.length>0&&(<div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px",marginBottom:12}}><div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:14}}>계좌별 비중</div><div style={{display:"flex",alignItems:"center",gap:16}}><DonutChart slices={accSlices} size={140}/><div style={{flex:1}}>{accSlices.map((s,i)=>{const tot=accSlices.reduce((a,x)=>a+x.value,0);return(<div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/><span style={{fontSize:13,color:TEXT,flex:1}}>{s.label}</span><span style={{fontSize:12,fontFamily:"monospace",color:MUTED}}>{(s.value/tot*100).toFixed(1)}%</span></div>);})}</div></div></div>)}
-      {stockSlices.length>0&&(<div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px",marginBottom:12}}><div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:14}}>종목별 비중</div><div style={{display:"flex",alignItems:"center",gap:16}}><DonutChart slices={stockSlices} size={140}/><div style={{flex:1}}>{stockSlices.map((s,i)=>{const tot=stockSlices.reduce((a,x)=>a+x.value,0);return(<div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}><div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/><span style={{fontSize:12,color:TEXT,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:MUTED}}>{(s.value/tot*100).toFixed(1)}%</span></div>);})}</div></div></div>)}
-      <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:12,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,color:MUTED}}>USD/KRW 환율</span><span style={{fontSize:15,fontFamily:"monospace",fontWeight:700,color:TEXT}}>₩{usdKrw.toLocaleString()}</span></div>
+
+
+      <MarketBarInDash usdKrw={usdKrw} setUsdKrw={setUsdKrw}/>
       {accounts.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:MUTED,marginTop:20}}><div style={{fontSize:40,marginBottom:12}}>📊</div><p style={{fontSize:14,lineHeight:1.8}}>계좌 탭에서 계좌를 추가하고<br/>종목을 입력해주세요</p></div>}
     </div>
   );
@@ -253,26 +254,186 @@ function HistoryTab({history,accounts,usdKrw}){
   const today=new Date().toLocaleDateString("ko-KR",{month:"numeric",day:"numeric"});
   const pts=[...history];
   if(curTotal>0&&(!pts.length||pts[pts.length-1].date!==today))pts.push({date:today,total:Math.round(curTotal)});
-  if(pts.length<2)return(<div style={{padding:"60px 20px",textAlign:"center",color:MUTED}}><div style={{fontSize:40,marginBottom:12}}>📈</div><p style={{fontSize:14,lineHeight:1.8}}>시세 조회를 하면<br/>자동으로 추이가 기록돼요!</p></div>);
+
+  // 자산 비중 데이터
+  const allStocks=accounts.flatMap(a=>a.stocks||[]);
+  const totalAsset=allStocks.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
+
+  // 계좌별
+  const accSlices=accounts.map((a,i)=>({
+    label:a.name,color:COLORS[i%COLORS.length],
+    value:(a.stocks||[]).reduce((acc,s)=>s.currentPrice&&s.qty?acc+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):acc,0)
+  })).filter(s=>s.value>0);
+
+  // 섹터별
+  const sectorMap={};
+  allStocks.forEach((s,i)=>{
+    if(!s.currentPrice||!s.qty)return;
+    const v=toKrw(s.currentPrice*s.qty,s.currency||"KRW");
+    if(!sectorMap[s.sector])sectorMap[s.sector]={value:0,color:COLORS[Object.keys(sectorMap).length%COLORS.length]};
+    sectorMap[s.sector].value+=v;
+  });
+  const sectorSlices=Object.entries(sectorMap).map(([label,d])=>({label,...d})).sort((a,b)=>b.value-a.value);
+
+  // 그래프
+  const hasChart=pts.length>=2;
   const W=320,H=150,PX=12,PY=16;
   const vals=pts.map(p=>p.total),maxV=Math.max(...vals),minV=Math.min(...vals),rng=maxV-minV||1;
-  const points=pts.map((p,i)=>({x:PX+(i/(pts.length-1))*(W-PX*2),y:PY+(1-(p.total-minV)/rng)*(H-PY*2),...p}));
+  const points=hasChart?pts.map((p,i)=>({x:PX+(i/(pts.length-1))*(W-PX*2),y:PY+(1-(p.total-minV)/rng)*(H-PY*2),...p})):[];
   const pathD=points.map((p,i)=>`${i===0?"M":"L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const areaD=pathD+` L${points[points.length-1].x},${H} L${points[0].x},${H} Z`;
-  const change=pts[pts.length-1].total-pts[0].total,changeRate=pts[0].total>0?change/pts[0].total*100:0,col=change>=0?UP:DOWN;
+  const areaD=pathD+` L${points[points.length-1]?.x},${H} L${points[0]?.x},${H} Z`;
+  const change=pts.length>=2?pts[pts.length-1].total-pts[0].total:0;
+  const changeRate=pts.length>=2&&pts[0].total>0?change/pts[0].total*100:0;
+  const col=change>=0?UP:DOWN;
+
+  // 도넛 SVG (인라인)
+  function PieChart({slices,size=140}){
+    const r=52,cx=70,cy=70,stroke=22,circ=2*Math.PI*r;
+    const total=slices.reduce((a,s)=>a+s.value,0);
+    if(!total)return<div style={{width:size,height:size,borderRadius:"50%",background:SUR2}}/>;
+    let offset=0;
+    return(
+      <svg width={size} height={size} viewBox="0 0 140 140">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={SUR2} strokeWidth={stroke}/>
+        {slices.map((s,i)=>{
+          const dash=(s.value/total)*circ;
+          const el=<circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={stroke}
+            strokeDasharray={`${dash} ${circ-dash}`} strokeDashoffset={-offset}
+            style={{transform:"rotate(-90deg)",transformOrigin:"center"}}/>;
+          offset+=dash;return el;
+        })}
+        <text x={cx} y={cy-6} textAnchor="middle" fill={TEXT} fontSize="11" fontFamily="monospace">총자산</text>
+        <text x={cx} y={cy+10} textAnchor="middle" fill={TEXT} fontSize="9" fontFamily="monospace">
+          {totalAsset>0?"₩"+Math.round(totalAsset/10000).toLocaleString()+"만":"—"}
+        </text>
+      </svg>
+    );
+  }
+
   return(
     <div style={{padding:"16px 16px 40px"}}>
-      <div style={{background:"linear-gradient(135deg,#1a2a4a,#0d1a30)",borderRadius:20,padding:"22px 20px",marginBottom:14,border:"1px solid #1e3050"}}><div style={{fontSize:12,color:"#7090b0",marginBottom:6,letterSpacing:1}}>전체 기간 변동</div><div style={{fontSize:28,fontWeight:800,fontFamily:"monospace",color:TEXT}}>{change>=0?"+":"-"}₩{Math.abs(Math.round(change)).toLocaleString()}</div><div style={{fontSize:15,color:col,fontWeight:600,marginTop:4}}>{changeRate>=0?"+":""}{changeRate.toFixed(2)}% · {pts.length}회 기록</div></div>
-      <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px",marginBottom:12}}><div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:14}}>자산 추이</div>
-        <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{height:150,display:"block"}}><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.25"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs><path d={areaD} fill="url(#g)"/><path d={pathD} fill="none" stroke={col} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>{points.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3.5" fill={col} stroke={SUR} strokeWidth="2"/>)}</svg>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:8,padding:`0 ${PX}px`}}>{[points[0],points[Math.floor(points.length/2)],points[points.length-1]].map((p,i)=><span key={i} style={{fontSize:10,color:MUTED}}>{p.date}</span>)}</div>
-      </div>
-      <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"16px"}}><div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:12}}>기록 내역</div>
-        {[...pts].reverse().map((p,i,arr)=>{const prev=arr[i+1];const diff=prev?p.total-prev.total:null;return(<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:i<arr.length-1?`1px solid ${BOR}`:"none"}}><span style={{fontSize:13,color:MUTED}}>{p.date}</span><div style={{textAlign:"right"}}><div style={{fontSize:15,fontFamily:"monospace",fontWeight:700,color:TEXT}}>₩{p.total.toLocaleString()}</div>{diff!==null&&<div style={{fontSize:11,color:diff>0?UP:diff<0?DOWN:MUTED}}>{diff>0?"+":""}{diff.toLocaleString()}</div>}</div></div>);})}
-      </div>
+
+      {/* ── 자산 그래프 (상단) */}
+      {hasChart?(
+        <>
+          <div style={{background:"linear-gradient(135deg,#1a2a4a,#0d1a30)",borderRadius:20,padding:"20px",marginBottom:14,border:"1px solid #1e3050"}}>
+            <div style={{fontSize:12,color:"#7090b0",marginBottom:4,letterSpacing:1}}>전체 기간 변동</div>
+            <div style={{fontSize:26,fontWeight:800,fontFamily:"monospace",color:TEXT}}>{change>=0?"+":"-"}₩{Math.abs(Math.round(change)).toLocaleString()}</div>
+            <div style={{fontSize:14,color:col,fontWeight:600,marginTop:3}}>{changeRate>=0?"+":""}{changeRate.toFixed(2)}% · {pts.length}회 기록</div>
+          </div>
+
+          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"16px",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:12}}>자산 추이</div>
+            <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{height:150,display:"block"}}>
+              <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={col} stopOpacity="0.25"/>
+                <stop offset="100%" stopColor={col} stopOpacity="0"/>
+              </linearGradient></defs>
+              <path d={areaD} fill="url(#g)"/>
+              <path d={pathD} fill="none" stroke={col} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              {points.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3.5" fill={col} stroke={SUR} strokeWidth="2"/>)}
+            </svg>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:8,padding:`0 ${PX}px`}}>
+              {[points[0],points[Math.floor(points.length/2)],points[points.length-1]].filter(Boolean).map((p,i)=>(
+                <span key={i} style={{fontSize:10,color:MUTED}}>{p.date}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* 기록 내역 */}
+          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"16px",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:12}}>기록 내역</div>
+            {[...pts].reverse().map((p,i,arr)=>{
+              const prev=arr[i+1];const diff=prev?p.total-prev.total:null;
+              return(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${BOR}`:"none"}}>
+                  <span style={{fontSize:13,color:MUTED}}>{p.date}</span>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:15,fontFamily:"monospace",fontWeight:700,color:TEXT}}>₩{p.total.toLocaleString()}</div>
+                    {diff!==null&&<div style={{fontSize:11,color:diff>0?UP:diff<0?DOWN:MUTED}}>{diff>0?"+":""}{diff.toLocaleString()}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ):(
+        <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"30px 20px",textAlign:"center",color:MUTED,marginBottom:14}}>
+          <div style={{fontSize:36,marginBottom:10}}>📈</div>
+          <p style={{fontSize:14,lineHeight:1.8}}>시세 조회를 하면<br/>자동으로 추이가 기록돼요!</p>
+        </div>
+      )}
+
+      {/* ── 자산 비중 다이어그램 (하단) */}
+      {totalAsset>0&&(
+        <>
+          {/* 계좌별 비중 */}
+          {accSlices.length>0&&(
+            <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px",marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:16}}>계좌별 자산 비중</div>
+              <div style={{display:"flex",alignItems:"center",gap:20}}>
+                <div style={{flexShrink:0}}><PieChart slices={accSlices} size={140}/></div>
+                <div style={{flex:1}}>
+                  {accSlices.map((s,i)=>{
+                    const tot=accSlices.reduce((a,x)=>a+x.value,0);
+                    const pct=(s.value/tot*100).toFixed(1);
+                    return(
+                      <div key={i} style={{marginBottom:10}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                          <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                          <span style={{fontSize:13,color:TEXT,flex:1,fontWeight:500}}>{s.label}</span>
+                          <span style={{fontSize:13,fontFamily:"monospace",fontWeight:700,color:TEXT}}>{pct}%</span>
+                        </div>
+                        <div style={{height:4,borderRadius:2,background:BOR,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:2,transition:"width 0.5s"}}/>
+                        </div>
+                        <div style={{fontSize:10,color:MUTED,marginTop:2,textAlign:"right",fontFamily:"monospace"}}>
+                          ₩{Math.round(s.value).toLocaleString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 섹터별 비중 */}
+          {sectorSlices.length>0&&(
+            <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px"}}>
+              <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:16}}>섹터별 자산 비중</div>
+              <div style={{display:"flex",alignItems:"center",gap:20}}>
+                <div style={{flexShrink:0}}><PieChart slices={sectorSlices} size={140}/></div>
+                <div style={{flex:1}}>
+                  {sectorSlices.map((s,i)=>{
+                    const tot=sectorSlices.reduce((a,x)=>a+x.value,0);
+                    const pct=(s.value/tot*100).toFixed(1);
+                    return(
+                      <div key={i} style={{marginBottom:10}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                          <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                          <span style={{fontSize:13,color:TEXT,flex:1,fontWeight:500}}>{s.label}</span>
+                          <span style={{fontSize:13,fontFamily:"monospace",fontWeight:700,color:TEXT}}>{pct}%</span>
+                        </div>
+                        <div style={{height:4,borderRadius:2,background:BOR,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:2,transition:"width 0.5s"}}/>
+                        </div>
+                        <div style={{fontSize:10,color:MUTED,marginTop:2,textAlign:"right",fontFamily:"monospace"}}>
+                          ₩{Math.round(s.value).toLocaleString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
+
 
 function StockModal({stock,onClose,onSave,customSectors=[]}){
   const[name,setName]=useState(stock?.name||"");
@@ -745,9 +906,9 @@ export default function App(){
             </div>
           </div>
           {tab!=="admin"&&<TabBar tab={tab} setTab={setTab}/>}
-          {tab==="dash"&&<MarketBar usdKrw={usdKrw} setUsdKrw={setUsdKrw}/>}
+
         </div>
-        {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} onRefresh={refresh} loading={loading} updated={updated}/>}
+        {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} setUsdKrw={setUsdKrw} onRefresh={refresh} loading={loading} updated={updated}/>}
         {tab==="history"&&<HistoryTab history={history} accounts={accounts} usdKrw={usdKrw}/>}
         {tab==="chart"&&<ChartTab accounts={accounts}/>}
         {tab==="accounts"&&<AccountsTab accounts={accounts} setAccounts={setAccounts} usdKrw={usdKrw} onRefresh={refresh} loading={loading}/>}
