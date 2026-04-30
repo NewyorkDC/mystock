@@ -430,9 +430,21 @@ function ChartCard({stock}){
 
 function ChartTab({accounts}){
   const allStocks=accounts.flatMap(a=>a.stocks||[]).filter(s=>s.ticker);
-  // 섹터별 그룹
-  const groups={};
-  allStocks.forEach(s=>{if(!groups[s.sector])groups[s.sector]=[];groups[s.sector].push(s);});
+  const [order,setOrder]=useState(()=>allStocks.map((_,i)=>i));
+  const [toast,setToast]=useState("");
+  function showToast(m){setToast(m);setTimeout(()=>setToast(""),2000);}
+
+  // allStocks 변경시 order 동기화
+  React.useEffect(()=>{
+    setOrder(allStocks.map((_,i)=>i));
+  },[allStocks.length]);
+
+  const sortedStocks=order.map(i=>allStocks[i]).filter(Boolean);
+  const drag=useDrag(sortedStocks,(ns)=>{
+    const newOrder=ns.map(s=>allStocks.findIndex(a=>a.ticker===s.ticker));
+    setOrder(newOrder);
+    showToast("순서 변경됐어요 ✓");
+  });
 
   if(allStocks.length===0)return(
     <div style={{padding:"60px 20px",textAlign:"center",color:MUTED}}>
@@ -443,16 +455,16 @@ function ChartTab({accounts}){
 
   return(
     <div style={{padding:"16px 16px 40px"}}>
-      {Object.entries(groups).map(([sector,list])=>(
-        <div key={sector} style={{marginBottom:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0 10px",fontSize:12,fontWeight:700,color:MUTED,borderBottom:`1px solid ${BOR}`,marginBottom:12}}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:COLORS[Object.keys(groups).indexOf(sector)%COLORS.length],flexShrink:0}}/>
-            {sector}
-            <span style={{fontSize:10,background:SUR2,borderRadius:20,padding:"2px 7px"}}>{list.length}</span>
+      <div style={{fontSize:11,color:MUTED,marginBottom:12,paddingLeft:2}}>꾹 눌러서 차트 순서 변경 가능</div>
+      {sortedStocks.map((s,i)=>{
+        const db=drag(i);
+        return(
+          <div key={s.ticker} {...db} style={{...db.style,marginBottom:12,borderRadius:14,overflow:"hidden"}}>
+            <ChartCard stock={s}/>
           </div>
-          {list.map(s=><ChartCard key={s.id||s.ticker} stock={s}/>)}
-        </div>
-      ))}
+        );
+      })}
+      <Toast msg={toast}/>
     </div>
   );
 }
