@@ -98,6 +98,55 @@ function LoginScreen(){
   );
 }
 
+
+// ── 시장 현황 바
+function MarketBar(){
+  const [data,setData]=useState({
+    kospi:{value:"—",change:"—",up:null},
+    nasdaq:{value:"—",change:"—",up:null},
+    oil:{value:"—",change:"—",up:null},
+    usdkrw:{value:"1,478",change:"—",up:null},
+  });
+  const[loading,setLoading]=useState(false);
+
+  async function fetchMarket(){
+    setLoading(true);
+    try{
+      const res=await fetch("/api/market");
+      if(res.ok){const d=await res.json();setData(d);}
+    }catch{}
+    setLoading(false);
+  }
+
+  useEffect(()=>{fetchMarket();},[]);
+
+  const items=[
+    {label:"코스피",  ...data.kospi},
+    {label:"나스닥",  ...data.nasdaq},
+    {label:"원유",    ...data.oil},
+    {label:"원/달러", ...data.usdkrw},
+  ];
+
+  return(
+    <div style={{background:SUR2,borderBottom:`1px solid ${BOR}`,overflowX:"auto",scrollbarWidth:"none"}}>
+      <div style={{display:"flex",minWidth:"max-content",padding:"8px 12px",gap:16,alignItems:"center"}}>
+        {items.map((item,i)=>(
+          <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:70}}>
+            <span style={{fontSize:10,color:MUTED,marginBottom:2}}>{item.label}</span>
+            <span style={{fontSize:13,fontFamily:"monospace",fontWeight:700,color:TEXT}}>{item.value}</span>
+            {item.change!=="—"&&(
+              <span style={{fontSize:10,fontFamily:"monospace",color:item.up?UP:item.up===false?DOWN:MUTED}}>{item.up?"+":""}{item.change}</span>
+            )}
+          </div>
+        ))}
+        <button onClick={fetchMarket} disabled={loading} style={{fontSize:10,color:MUTED,background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}}>
+          <span style={loading?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DashTab({accounts,usdKrw,onRefresh,loading,updated}){
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const allS=accounts.flatMap(a=>a.stocks||[]);
@@ -623,6 +672,7 @@ export default function App(){
             </div>
           </div>
           {tab!=="admin"&&<TabBar tab={tab} setTab={setTab}/>}
+          {tab==="dash"&&<MarketBar/>}
         </div>
         {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} onRefresh={refresh} loading={loading} updated={updated}/>}
         {tab==="history"&&<HistoryTab history={history} accounts={accounts} usdKrw={usdKrw}/>}
