@@ -511,8 +511,165 @@ function StockList({stocks,accId,onReorderStocks,onEditStock,onDeleteStock,confi
   );
 }
 
+
+// ── 캡처 이미지로 종목 자동 입력 (Claude AI)
+function OCRModal({accounts,onClose,onImport}){
+  const[step,setStep]=useState("upload"); // upload | confirm
+  const[imgBase64,setImgBase64]=useState(null);
+  const[imgPreview,setImgPreview]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const[parsed,setParsed]=useState([]);
+  const[error,setError]=useState("");
+  const[targetAcc,setTargetAcc]=useState(accounts[0]?.id||"");
+  const fileRef=React.useRef();
+
+  function onFile(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const b64=ev.target.result.split(",")[1];
+      setImgBase64(b64);
+      setImgPreview(ev.target.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function analyze(){
+    if(!imgBase64){setError("이미지를 먼저 선택해주세요.");return;}
+    setLoading(true);setError("");
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          messages:[{
+            role:"user",
+            content:[
+              {type:"image",source:{type:"base64",media_type:"image/jpeg",data:imgBase64}},
+              {type:"text",text:`이 증권사 앱 캡처 이미지에서 보유 종목 정보를 추출해주세요.
+JSON 배열만 반환하세요. 다른 텍스트 없이 순수 JSON만.
+형식: [{"name":"종목명","buyPrice":매수평균가숫자,"qty":보유수량숫자,"ticker":"티커심볼","sector":"섹터"}]
+- ticker: 한국주식은 종목코드.KS 또는 .KQ, 미국주식은 티커심볼(TSM, AAPL 등)
+- sector: 건설/배터리/반도체/통신/바이오/금융/IT/미국/ETF/기타 중 하나
+- 숫자는 쉼표 없이 순수 숫자로
+- 확인 불가한 값은 null`}
+            ]
+          }]
+        })
+      });
+      const d=await res.json();
+      const text=d.content?.[0]?.text||"";
+      const clean=text.replace(/```json|```/g,"").trim();
+      const stocks=JSON.parse(clean);
+      if(!Array.isArray(stocks)||stocks.length===0)throw new Error("종목을 찾지 못했어요");
+      setParsed(stocks);
+      setStep("confirm");
+    }catch(e){
+      setError("분석 실패: "+e.message+". 더 선명한 이미지를 사용해보세요.");
+    }
+    setLoading(false);
+  }
+
+  function updateStock(i,field,val){
+    setParsed(prev=>prev.map((s,idx)=>idx===i?{...s,[field]:val}:s));
+  }
+  function removeStock(i){setParsed(prev=>prev.filter((_,idx)=>idx!==i));}
+
+  const inp={background:BG,border:`1px solid ${BOR}`,borderRadius:8,color:TEXT,fontSize:13,padding:"7px 10px",fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
+
+  return(
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500}}>
+      <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto",padding:"22px 20px 44px"}}>
+
+        {step==="upload"&&(
+          <>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:6}}>📷 캡처로 종목 입력</div>
+            <div style={{fontSize:13,color:MUTED,marginBottom:20,lineHeight:1.6}}>증권사 앱의 보유종목 화면을 캡처해서 올리면<br/>AI가 자동으로 종목 정보를 읽어줘요</div>
+
+            {/* 이미지 업로드 */}
+            <div onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${imgPreview?ACC:BOR}`,borderRadius:14,padding:"24px",textAlign:"center",cursor:"pointer",marginBottom:14,background:imgPreview?"rgba(79,142,247,.05)":SUR2}}>
+              {imgPreview?(
+                <img src={imgPreview} style={{maxWidth:"100%",maxHeight:300,borderRadius:8,objectFit:"contain"}} alt="preview"/>
+              ):(
+                <>
+                  <div style={{fontSize:36,marginBottom:8}}>📂</div>
+                  <div style={{fontSize:14,color:MUTED}}>클릭해서 이미지 선택</div>
+                  <div style={{fontSize:11,color:MUTED,marginTop:4}}>JPG, PNG 지원</div>
+                </>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{display:"none"}}/>
+
+            {/* 계좌 선택 */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>추가할 계좌</div>
+              <select value={targetAcc} onChange={e=>setTargetAcc(e.target.value)} style={{...inp,width:"100%",padding:"10px 12px",fontSize:14}}>
+                {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+
+            {error&&<div style={{color:DOWN,fontSize:13,padding:"10px 14px",background:"rgba(240,64,96,.1)",borderRadius:10,marginBottom:12}}>{error}</div>}
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={onClose} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
+              <button onClick={analyze} disabled={loading||!imgBase64} style={{flex:2,padding:13,borderRadius:12,background:"#8b5cf6",border:"none",color:"#fff",fontSize:14,cursor:"pointer",fontWeight:600,fontFamily:"inherit",opacity:loading||!imgBase64?0.5:1}}>
+                {loading?"AI 분석 중...":"🤖 자동 분석"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step==="confirm"&&(
+          <>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:4}}>✅ 인식된 종목 확인</div>
+            <div style={{fontSize:13,color:MUTED,marginBottom:16}}>{parsed.length}개 종목 · 수정 후 추가하세요</div>
+
+            {parsed.map((s,i)=>(
+              <div key={i} style={{background:SUR2,border:`1px solid ${BOR}`,borderRadius:12,padding:"12px 14px",marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <input value={s.name||""} onChange={e=>updateStock(i,"name",e.target.value)} style={{...inp,flex:1,fontSize:14,fontWeight:600,marginRight:8}} placeholder="종목명"/>
+                  <button onClick={()=>removeStock(i)} style={{width:24,height:24,borderRadius:"50%",border:"none",background:"rgba(240,64,96,.2)",color:DOWN,cursor:"pointer",fontSize:12,flexShrink:0}}>✕</button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:MUTED,marginBottom:3}}>매수 평균가</div>
+                    <input value={s.buyPrice||""} onChange={e=>updateStock(i,"buyPrice",parseFloat(e.target.value)||0)} type="number" style={{...inp,width:"100%"}} placeholder="0"/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:MUTED,marginBottom:3}}>보유 수량</div>
+                    <input value={s.qty||""} onChange={e=>updateStock(i,"qty",parseFloat(e.target.value)||0)} type="number" style={{...inp,width:"100%"}} placeholder="0"/>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:MUTED,marginBottom:3}}>티커</div>
+                    <input value={s.ticker||""} onChange={e=>updateStock(i,"ticker",e.target.value)} style={{...inp,width:"100%"}} placeholder="005930.KS"/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:MUTED,marginBottom:3}}>섹터</div>
+                    <input value={s.sector||""} onChange={e=>updateStock(i,"sector",e.target.value)} style={{...inp,width:"100%"}} placeholder="반도체"/>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button onClick={()=>setStep("upload")} style={{width:"100%",padding:"10px",borderRadius:10,background:SUR2,border:`1px solid ${BOR}`,color:MUTED,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>← 다시 촬영</button>
+            <button onClick={()=>onImport(targetAcc,parsed.filter(s=>s.name&&s.buyPrice))} style={{width:"100%",padding:14,borderRadius:12,background:"#8b5cf6",border:"none",color:"#fff",fontSize:15,cursor:"pointer",fontWeight:700,fontFamily:"inherit"}}>
+              {parsed.filter(s=>s.name&&s.buyPrice).length}개 종목 추가하기
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
   const[showAdd,setShowAdd]=useState(false);
+  const[showOCR,setShowOCR]=useState(false);
   const[newName,setNewName]=useState("");
   const[expanded,setExpanded]=useState(null);
   const[stockModal,setStockModal]=useState(null);
@@ -559,6 +716,7 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
         <span style={{fontSize:19,fontWeight:700}}>내 계좌</span>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onRefresh} disabled={loading} style={{fontSize:12,padding:"7px 14px",borderRadius:9,background:ACC,border:"none",color:"#fff",cursor:loading?"not-allowed":"pointer",opacity:loading?0.5:1,fontFamily:"inherit"}}><span style={loading?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span>{" "}시세</button>
+          <button onClick={()=>setShowOCR(true)} style={{fontSize:12,padding:"7px 14px",borderRadius:9,background:"#8b5cf6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>📷 캡처입력</button>
           <button onClick={()=>setShowAdd(true)} style={{fontSize:12,padding:"7px 14px",borderRadius:9,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,cursor:"pointer",fontFamily:"inherit"}}>+ 계좌</button>
         </div>
       </div>
@@ -646,6 +804,15 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
         </div>
       )}
       {stockModal&&<StockModal stock={stockModal.stock} onClose={()=>setStockModal(null)} onSave={data=>saveStock(stockModal.accId,data,stockModal.stock?.id)} customSectors={customSectors}/>}
+      {showOCR&&<OCRModal accounts={accounts} onClose={()=>setShowOCR(false)} onImport={(accId,stocks)=>{
+        setAccounts(accounts.map(a=>{
+          if(a.id!==accId)return a;
+          const newStocks=stocks.map(s=>({id:makeId(),...s,currentPrice:null,currency:s.sector==="미국"?"USD":"KRW"}));
+          return{...a,stocks:[...(a.stocks||[]),...newStocks]};
+        }));
+        setShowOCR(false);
+        showToast(`${stocks.length}개 종목이 추가됐어요 ✓`);
+      }}/>}
       <Toast msg={toast}/>
     </div>
   );
