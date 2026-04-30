@@ -99,53 +99,126 @@ function LoginScreen(){
 }
 
 
-// ── 시장 현황 바
-function MarketBar(){
-  const [data,setData]=useState({
-    kospi:{value:"—",change:"—",up:null},
-    nasdaq:{value:"—",change:"—",up:null},
-    oil:{value:"—",change:"—",up:null},
-    usdkrw:{value:"1,478",change:"—",up:null},
-  });
+// ── 시장 현황 카드
+const DEFAULT_MARKET_ITEMS = [
+  {id:"kospi",  label:"코스피",  key:"kospi"},
+  {id:"nasdaq", label:"나스닥",  key:"nasdaq"},
+  {id:"oil",    label:"WTI 원유",key:"oil"},
+  {id:"usdkrw", label:"원/달러", key:"usdkrw"},
+];
+
+function MarketBar({usdKrw,setUsdKrw}){
+  const[data,setData]=useState({});
   const[loading,setLoading]=useState(false);
+  const[items,setItems]=useState(()=>{
+    try{const s=localStorage.getItem("marketItems");return s?JSON.parse(s):DEFAULT_MARKET_ITEMS;}catch{return DEFAULT_MARKET_ITEMS;}
+  });
+  const[showAdd,setShowAdd]=useState(false);
+  const[newLabel,setNewLabel]=useState("");
+  const[newTicker,setNewTicker]=useState("");
 
   async function fetchMarket(){
     setLoading(true);
     try{
       const res=await fetch("/api/market");
-      if(res.ok){const d=await res.json();setData(d);}
+      if(res.ok){
+        const d=await res.json();
+        setData(d);
+        // 환율 업데이트
+        if(d.usdkrw?.value){
+          const rate=parseFloat(d.usdkrw.value.replace(/,/g,""));
+          if(rate>100)setUsdKrw(rate);
+        }
+      }
     }catch{}
+    // 커스텀 티커도 조회
+    const custom=items.filter(i=>i.ticker);
+    if(custom.length>0){
+      try{
+        const res=await fetch("/api/prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tickers:custom.map(i=>({ticker:i.ticker,isKR:i.ticker.includes(".K")})),fetchRate:false})});
+        if(res.ok){
+          const d=await res.json();
+          const extra={};
+          d.prices?.forEach(p=>{if(p.price)extra[p.ticker]={value:p.price.toLocaleString("ko-KR",{maximumFractionDigits:2}),change:null,up:null};});
+          setData(prev=>({...prev,...extra}));
+        }
+      }catch{}
+    }
     setLoading(false);
   }
 
   useEffect(()=>{fetchMarket();},[]);
 
-  const items=[
-    {label:"코스피",  ...data.kospi},
-    {label:"나스닥",  ...data.nasdaq},
-    {label:"원유",    ...data.oil},
-    {label:"원/달러", ...data.usdkrw},
-  ];
+  function addItem(){
+    if(!newLabel.trim())return;
+    const newItem={id:makeId(),label:newLabel.trim(),ticker:newTicker.trim()||null,key:newTicker.trim()||null};
+    const updated=[...items,newItem];
+    setItems(updated);
+    localStorage.setItem("marketItems",JSON.stringify(updated));
+    setNewLabel("");setNewTicker("");setShowAdd(false);
+    fetchMarket();
+  }
+
+  function removeItem(id){
+    const updated=items.filter(i=>i.id!==id);
+    setItems(updated);
+    localStorage.setItem("marketItems",JSON.stringify(updated));
+  }
+
+  const inp={background:BG,border:`1px solid ${BOR}`,borderRadius:10,color:TEXT,fontSize:14,padding:"10px 12px",width:"100%",fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
 
   return(
-    <div style={{background:SUR2,borderBottom:`1px solid ${BOR}`,overflowX:"auto",scrollbarWidth:"none"}}>
-      <div style={{display:"flex",minWidth:"max-content",padding:"8px 12px",gap:16,alignItems:"center"}}>
-        {items.map((item,i)=>(
-          <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:70}}>
-            <span style={{fontSize:10,color:MUTED,marginBottom:2}}>{item.label}</span>
-            <span style={{fontSize:13,fontFamily:"monospace",fontWeight:700,color:TEXT}}>{item.value}</span>
-            {item.change!=="—"&&(
-              <span style={{fontSize:10,fontFamily:"monospace",color:item.up?UP:item.up===false?DOWN:MUTED}}>{item.up?"+":""}{item.change}</span>
-            )}
-          </div>
-        ))}
-        <button onClick={fetchMarket} disabled={loading} style={{fontSize:10,color:MUTED,background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}}>
-          <span style={loading?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span>
-        </button>
+    <div style={{padding:"14px 16px 0"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <span style={{fontSize:13,fontWeight:700,color:MUTED}}>시장 현황</span>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={fetchMarket} disabled={loading} style={{fontSize:12,padding:"4px 10px",borderRadius:7,background:SUR2,border:`1px solid ${BOR}`,color:MUTED,cursor:"pointer",fontFamily:"inherit"}}>
+            <span style={loading?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span> 새로고침
+          </button>
+          <button onClick={()=>setShowAdd(true)} style={{fontSize:12,padding:"4px 10px",borderRadius:7,background:ACC,border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit"}}>+ 추가</button>
+        </div>
       </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        {items.map(item=>{
+          const key=item.ticker||item.key;
+          const d=data[key]||{value:"—",change:null,up:null};
+          return(
+            <div key={item.id} style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:14,padding:"14px 16px",position:"relative"}}>
+              <button onClick={()=>removeItem(item.id)} style={{position:"absolute",top:8,right:8,width:18,height:18,borderRadius:"50%",border:"none",background:"transparent",color:MUTED,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+              <div style={{fontSize:12,color:MUTED,marginBottom:6}}>{item.label}</div>
+              <div style={{fontSize:22,fontWeight:800,fontFamily:"monospace",color:TEXT,marginBottom:4}}>{d.value}</div>
+              {d.change&&<span style={{fontSize:13,fontFamily:"monospace",fontWeight:600,color:d.up?UP:DOWN}}>{d.change}</span>}
+              {!d.change&&<span style={{fontSize:12,color:MUTED}}>—</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      {showAdd&&(
+        <div onClick={e=>e.target===e.currentTarget&&setShowAdd(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
+          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:16}}>관심 항목 추가</div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>이름 (예: 삼성전자, 금 등)</div>
+              <input style={inp} value={newLabel} onChange={e=>setNewLabel(e.target.value)} placeholder="표시할 이름"/>
+            </div>
+            <div style={{marginBottom:4}}>
+              <div style={{fontSize:11,color:MUTED,marginBottom:5}}>티커 심볼 (선택)</div>
+              <input style={inp} value={newTicker} onChange={e=>setNewTicker(e.target.value)} placeholder="AAPL, 005930.KS 등"/>
+              <div style={{fontSize:10,color:MUTED,marginTop:4}}>비워두면 기본 지수만 표시돼요</div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
+              <button onClick={addItem} style={{flex:2,padding:13,borderRadius:12,background:ACC,border:"none",color:"#fff",fontSize:14,cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>추가하기</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function DashTab({accounts,usdKrw,onRefresh,loading,updated}){
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
@@ -661,7 +734,7 @@ export default function App(){
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}body{background:${BG};}@keyframes spin{to{transform:rotate(360deg);}}select option{background:${SUR2};}`}</style>
         <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(10,12,16,.98)",backdropFilter:"blur(12px)",borderBottom:`1px solid ${BOR}`}}>
           <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:18,fontWeight:800}}>My<span style={{color:ACC}}>Stock</span></span>
+            <span onClick={()=>setTab("dash")} style={{fontSize:18,fontWeight:800,cursor:"pointer"}}>My<span style={{color:ACC}}>Stock</span></span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               {syncing&&<span style={{fontSize:11,color:MUTED}}>저장 중...</span>}
               {session.user.isAdmin&&(
@@ -672,7 +745,7 @@ export default function App(){
             </div>
           </div>
           {tab!=="admin"&&<TabBar tab={tab} setTab={setTab}/>}
-          {tab==="dash"&&<MarketBar/>}
+          {tab==="dash"&&<MarketBar usdKrw={usdKrw} setUsdKrw={setUsdKrw}/>}
         </div>
         {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} onRefresh={refresh} loading={loading} updated={updated}/>}
         {tab==="history"&&<HistoryTab history={history} accounts={accounts} usdKrw={usdKrw}/>}
