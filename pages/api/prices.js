@@ -33,17 +33,49 @@ async function fetchKR(ticker) {
   const changePercent = prevClose ? ((price2 - prevClose) / prevClose) * 100 : 0;
   return { price: price2, currency: "KRW", changePercent: Math.round(changePercent * 100) / 100 };
 }
+// Stooq로 지수/원자재 조회 (DXY, GOLD 등 Finnhub 미지원 종목)
+const STOOQ_MAP = {
+  "DXY": "dx.f",
+  "XAUUSD": "xau.f",
+  "XAGUSD": "xag.f",
+  "XCUUSD": "hg.f",
+  "NATGAS": "ng.f",
+  "WHEAT": "w.f",
+  "CORN": "c.f",
+  "BTCUSD": "btc.v",
+  "ETHUSD": "eth.v",
+  "VIX": "vix.f",
+};
+
+async function fetchStooq(stooqSymbol) {
+  const res = await fetch(
+    `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2ohlcv&h&e=csv`,
+    { headers: { "User-Agent": "Mozilla/5.0" } }
+  );
+  if (!res.ok) throw new Error(`Stooq ${res.status}`);
+  const text = await res.text();
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) throw new Error("no data");
+  const cols = lines[1].split(",");
+  const price = parseFloat(cols[4]);
+  const open = parseFloat(cols[2]);
+  if (!price || price <= 0) throw new Error("no price");
+  const changePercent = open && open !== 0 ? ((price - open) / open) * 100 : 0;
+  return { price, currency: "USD", changePercent: Math.round(changePercent * 100) / 100 };
+}
+
 async function fetchUS(ticker) {
+  if (STOOQ_MAP[ticker.toUpperCase()]) {
+    try { return await fetchStooq(STOOQ_MAP[ticker.toUpperCase()]); } catch {}
+  }
   const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`);
   if (!res.ok) throw new Error(`Finnhub ${res.status}`);
   const d = await res.json();
   if (!d.c || d.c === 0) throw new Error("no price");
-
-  // d.c = 현재가, d.pc = 전일종가
   const changePercent = d.pc && d.pc !== 0 ? ((d.c - d.pc) / d.pc) * 100 : 0;
-
   return { price: d.c, currency: "USD", changePercent: Math.round(changePercent * 100) / 100 };
 }
+
 
 async function fetchUsdKrw() {
   // 방법1: ExchangeRate-API (무료, CORS없음)
