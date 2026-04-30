@@ -62,6 +62,17 @@ async function fetchUsdKrw() {
   return 1478;
 }
 
+async function fetchJP(ticker) {
+  // Finnhub은 일본주식 지원 (심볼: 4062.T 형식)
+  const symbol = ticker.replace(".T", "") + ":TYO";
+  const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`);
+  if (!res.ok) throw new Error(`Finnhub JP ${res.status}`);
+  const d = await res.json();
+  if (!d.c || d.c === 0) throw new Error("no price");
+  const changePercent = d.pc && d.pc !== 0 ? ((d.c - d.pc) / d.pc) * 100 : 0;
+  return { price: d.c, currency: "JPY", changePercent: Math.round(changePercent * 100) / 100 };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   const { tickers, fetchRate } = req.body;
@@ -69,7 +80,11 @@ export default async function handler(req, res) {
 
   const [rateResult, ...priceResults] = await Promise.allSettled([
     fetchRate ? fetchUsdKrw() : Promise.resolve(1450),
-    ...tickers.map(({ ticker, isKR }) => isKR ? fetchKR(ticker) : fetchUS(ticker)),
+    ...tickers.map(({ ticker, isKR }) => {
+      if (isKR) return fetchKR(ticker);
+      if (ticker.endsWith(".T")) return fetchJP(ticker);
+      return fetchUS(ticker);
+    }),
   ]);
 
   const usdKrw = rateResult.status === "fulfilled" ? rateResult.value : 1450;
