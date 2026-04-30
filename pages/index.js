@@ -134,7 +134,16 @@ function MarketBar({usdKrw,setUsdKrw}){
         if(res.ok){
           const d=await res.json();
           const extra={};
-          d.prices?.forEach(p=>{if(p.price)extra[p.ticker]={value:p.price.toLocaleString("ko-KR",{maximumFractionDigits:2}),change:null,up:null};});
+          d.prices?.forEach(p=>{
+            if(p.price){
+              const cp=p.changePercent;
+              extra[p.ticker]={
+                value:p.price.toLocaleString("ko-KR",{maximumFractionDigits:2}),
+                change:cp!=null?`${cp>=0?"+":""}${Math.abs(cp).toFixed(2)}%`:null,
+                up:cp!=null?cp>=0:null,
+              };
+            }
+          });
           setData(prev=>({...prev,...extra}));
         }
       }catch{}
