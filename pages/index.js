@@ -516,6 +516,7 @@ function StockList({stocks,accId,onReorderStocks,onEditStock,onDeleteStock,confi
 function OCRModal({accounts,onClose,onImport}){
   const[step,setStep]=useState("upload"); // upload | confirm
   const[imgBase64,setImgBase64]=useState(null);
+  const[imgMediaType,setImgMediaType]=useState("image/jpeg");
   const[imgPreview,setImgPreview]=useState(null);
   const[loading,setLoading]=useState(false);
   const[parsed,setParsed]=useState([]);
@@ -526,6 +527,8 @@ function OCRModal({accounts,onClose,onImport}){
   function onFile(e){
     const file=e.target.files[0];
     if(!file)return;
+    const mt=file.type||"image/jpeg";
+    setImgMediaType(mt);
     const reader=new FileReader();
     reader.onload=ev=>{
       const b64=ev.target.result.split(",")[1];
@@ -539,36 +542,19 @@ function OCRModal({accounts,onClose,onImport}){
     if(!imgBase64){setError("이미지를 먼저 선택해주세요.");return;}
     setLoading(true);setError("");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/ocr",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:1000,
-          messages:[{
-            role:"user",
-            content:[
-              {type:"image",source:{type:"base64",media_type:"image/jpeg",data:imgBase64}},
-              {type:"text",text:`이 증권사 앱 캡처 이미지에서 보유 종목 정보를 추출해주세요.
-JSON 배열만 반환하세요. 다른 텍스트 없이 순수 JSON만.
-형식: [{"name":"종목명","buyPrice":매수평균가숫자,"qty":보유수량숫자,"ticker":"티커심볼","sector":"섹터"}]
-- ticker: 한국주식은 종목코드.KS 또는 .KQ, 미국주식은 티커심볼(TSM, AAPL 등)
-- sector: 건설/배터리/반도체/통신/바이오/금융/IT/미국/ETF/기타 중 하나
-- 숫자는 쉼표 없이 순수 숫자로
-- 확인 불가한 값은 null`}
-            ]
-          }]
-        })
+        body:JSON.stringify({imageBase64:imgBase64,mediaType:imgMediaType})
       });
       const d=await res.json();
-      const text=d.content?.[0]?.text||"";
-      const clean=text.replace(/```json|```/g,"").trim();
-      const stocks=JSON.parse(clean);
-      if(!Array.isArray(stocks)||stocks.length===0)throw new Error("종목을 찾지 못했어요");
+      if(d.error)throw new Error(d.error);
+      const stocks=d.stocks||[];
+      if(stocks.length===0)throw new Error("종목을 찾지 못했어요. 보유종목 화면을 캡처해주세요.");
       setParsed(stocks);
       setStep("confirm");
     }catch(e){
-      setError("분석 실패: "+e.message+". 더 선명한 이미지를 사용해보세요.");
+      setError("분석 실패: "+e.message);
     }
     setLoading(false);
   }
