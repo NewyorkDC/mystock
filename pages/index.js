@@ -202,6 +202,26 @@ function MarketBar({usdKrw,setUsdKrw,marketItems,setMarketItems}){
         })}
       </div>
 
+      {cashEdit&&(
+        <div onClick={e=>e.target===e.currentTarget&&setCashEdit(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
+          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:16}}>💰 예수금 입력</div>
+            <div style={{fontSize:11,color:MUTED,marginBottom:6}}>금액</div>
+            <input style={inp} type="number" value={cashEdit.val} onChange={e=>setCashEdit({...cashEdit,val:e.target.value})} placeholder="0" autoFocus/>
+            <div style={{fontSize:11,color:MUTED,marginBottom:6,marginTop:12}}>통화</div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              {["KRW","USD","JPY"].map(c=>(
+                <button key={c} onClick={()=>setCashEdit({...cashEdit,currency:c})} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${cashEdit.currency===c?ACC:BOR}`,background:cashEdit.currency===c?"rgba(79,142,247,.15)":SUR2,color:cashEdit.currency===c?ACC:MUTED,cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"inherit"}}>{c}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setCashEdit(null)} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:15,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
+              <button onClick={()=>saveCash(cashEdit.accId,cashEdit.val,cashEdit.currency)} style={{flex:2,padding:13,borderRadius:12,background:ACC,border:"none",color:"#fff",fontSize:15,cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>저장하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAdd&&(
         <div onClick={e=>e.target===e.currentTarget&&setShowAdd(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
           <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
@@ -265,7 +285,8 @@ const MarketBarInDash=MarketBar;
 function DashTab({accounts,usdKrw,setUsdKrw,onRefresh,loading,updated,marketItems,setMarketItems}){
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const allS=accounts.flatMap(a=>a.stocks||[]);
-  const totalAsset=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
+  const cashTotal=accounts.reduce((a,acc)=>acc.cash?a+toKrw(acc.cash,acc.cashCurrency||"KRW"):a,0);
+  const totalAsset=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0)+cashTotal;
   const totalBuy=allS.reduce((a,s)=>s.buyPrice&&s.qty?a+toKrw(s.buyPrice*s.qty,s.currency||"KRW"):a,0);
   const profit=totalAsset-totalBuy,rate=totalBuy>0?profit/totalBuy*100:0;
   return(
@@ -285,7 +306,96 @@ function DashTab({accounts,usdKrw,setUsdKrw,onRefresh,loading,updated,marketItem
   );
 }
 
-function HistoryTab({history,accounts,usdKrw}){
+function HistoryRecords({pts,history,onSaveHistory}){
+  const[open,setOpen]=useState(false);
+  const[editIdx,setEditIdx]=useState(null); // index in history array
+  const[editVal,setEditVal]=useState("");
+  const[confirmDel,setConfirmDel]=useState(null);
+
+  function handleEdit(p){
+    // pts의 date로 history에서 찾기
+    const idx=history.findIndex(h=>h.date===p.date);
+    if(idx===-1)return;
+    setEditIdx(idx);
+    setEditVal(String(history[idx].total));
+  }
+  function saveEdit(){
+    if(editIdx===null)return;
+    const val=parseInt(editVal.replace(/,/g,""));
+    if(!val||isNaN(val))return;
+    const newH=history.map((h,i)=>i===editIdx?{...h,total:val}:h);
+    onSaveHistory(newH);
+    setEditIdx(null);
+  }
+  function handleDelete(p){
+    const newH=history.filter(h=>h.date!==p.date);
+    onSaveHistory(newH);
+    setConfirmDel(null);
+  }
+
+  const reversed=[...pts].reverse();
+  return(
+    <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,marginBottom:14,overflow:"hidden"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
+        <span style={{fontSize:13,fontWeight:700,color:MUTED}}>기록 내역 ({pts.length}회)</span>
+        <span style={{color:MUTED,fontSize:13}}>{open?"▲":"▼"}</span>
+      </div>
+      {open&&(
+        <div style={{borderTop:`1px solid ${BOR}`}}>
+          {reversed.map((p,i)=>{
+            const prev=reversed[i+1];
+            const diff=prev?p.total-prev.total:null;
+            const hIdx=history.findIndex(h=>h.date===p.date);
+            const isEditing=editIdx===hIdx&&hIdx!==-1;
+            return(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderBottom:i<reversed.length-1?`1px solid ${BOR}`:"none"}}>
+                <span style={{fontSize:13,color:MUTED,flexShrink:0}}>{p.date}</span>
+                <div style={{flex:1,textAlign:"right",marginRight:8}}>
+                  {isEditing?(
+                    <div style={{display:"flex",gap:4,justifyContent:"flex-end",alignItems:"center"}}>
+                      <input
+                        value={editVal}
+                        onChange={e=>setEditVal(e.target.value)}
+                        onKeyDown={e=>{if(e.key==="Enter")saveEdit();if(e.key==="Escape")setEditIdx(null);}}
+                        autoFocus
+                        type="number"
+                        style={{width:130,background:BG,border:`1px solid ${ACC}`,borderRadius:7,color:TEXT,fontSize:13,padding:"4px 7px",fontFamily:"monospace",outline:"none",textAlign:"right"}}
+                      />
+                      <button onClick={saveEdit} style={{padding:"4px 8px",borderRadius:7,border:"none",background:ACC,color:"#fff",cursor:"pointer",fontSize:12}}>✓</button>
+                      <button onClick={()=>setEditIdx(null)} style={{padding:"4px 8px",borderRadius:7,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:12}}>✕</button>
+                    </div>
+                  ):(
+                    <>
+                      <div style={{fontSize:15,fontFamily:"monospace",fontWeight:700,color:TEXT}}>₩{p.total.toLocaleString()}</div>
+                      {diff!==null&&<div style={{fontSize:11,color:diff>0?UP:diff<0?DOWN:MUTED}}>{diff>0?"+":""}{diff.toLocaleString()}</div>}
+                    </>
+                  )}
+                </div>
+                {!isEditing&&(
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    {confirmDel===p.date?(
+                      <>
+                        <button onClick={()=>handleDelete(p)} style={{padding:"3px 8px",borderRadius:7,border:"none",background:DOWN,color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700}}>삭제</button>
+                        <button onClick={()=>setConfirmDel(null)} style={{padding:"3px 8px",borderRadius:7,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:11}}>취소</button>
+                      </>
+                    ):(
+                      <>
+                        <button onClick={()=>handleEdit(p)} style={{width:24,height:24,borderRadius:6,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+                        <button onClick={()=>setConfirmDel(p.date)} style={{width:24,height:24,borderRadius:6,border:"1px solid rgba(240,64,96,.4)",background:"rgba(240,64,96,.1)",color:DOWN,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryTab({history,accounts,usdKrw,onSaveHistory}){
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const curTotal=accounts.flatMap(a=>a.stocks||[]).reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
   const today=new Date().toLocaleDateString("ko-KR",{month:"numeric",day:"numeric"});
@@ -311,8 +421,8 @@ function HistoryTab({history,accounts,usdKrw}){
   });
   const sectorSlices=Object.entries(sectorMap).map(([label,d])=>({label,...d})).sort((a,b)=>b.value-a.value);
 
-  // ── 종목별 비중 (신규 추가)
-  const stockSlices=allStocks
+  // ── 종목별 비중 (상위 10개 + 기타)
+  const allStockSlicesRaw=allStocks
     .filter(s=>s.currentPrice&&s.qty)
     .map((s,i)=>({
       label:s.name,
@@ -322,6 +432,13 @@ function HistoryTab({history,accounts,usdKrw}){
       rate:s.buyPrice?(s.currentPrice-s.buyPrice)/s.buyPrice*100:null,
     }))
     .sort((a,b)=>b.value-a.value);
+  const TOP_N=10;
+  const topSlices=allStockSlicesRaw.slice(0,TOP_N);
+  const restSlices=allStockSlicesRaw.slice(TOP_N);
+  const restValue=restSlices.reduce((a,s)=>a+s.value,0);
+  const stockSlices=restValue>0
+    ?[...topSlices,{label:`기타 ${restSlices.length}종목`,ticker:"",color:MUTED,value:restValue,rate:null}]
+    :topSlices;
 
   // 그래프
   const hasChart=pts.length>=2;
@@ -358,34 +475,32 @@ function HistoryTab({history,accounts,usdKrw}){
   }
 
   // 비중 섹션 공통 렌더러
-  function AllocationSection({title,slices}){
+  function AllocationSection({title,slices,twoCol=false}){
     if(!slices.length)return null;
     const tot=slices.reduce((a,x)=>a+x.value,0);
     return(
       <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px",marginBottom:12}}>
         <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:16}}>{title}</div>
-        <div style={{display:"flex",alignItems:"center",gap:20}}>
-          <div style={{flexShrink:0}}><PieChart slices={slices} size={140}/></div>
-          <div style={{flex:1}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:16}}>
+          <div style={{flexShrink:0}}><PieChart slices={slices} size={130}/></div>
+          <div style={{flex:1,display:"grid",gridTemplateColumns:twoCol?"1fr 1fr":"1fr",gap:"6px 10px"}}>
             {slices.map((s,i)=>{
               const pct=(s.value/tot*100).toFixed(1);
               return(
-                <div key={i} style={{marginBottom:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
-                    <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
-                    <span style={{fontSize:13,color:TEXT,flex:1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.label}</span>
-                    <span style={{fontSize:13,fontFamily:"monospace",fontWeight:700,color:TEXT,flexShrink:0}}>{pct}%</span>
+                <div key={i}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                    <span style={{fontSize:11,color:TEXT,flex:1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.label}</span>
+                    <span style={{fontSize:11,fontFamily:"monospace",fontWeight:700,color:TEXT,flexShrink:0}}>{pct}%</span>
                   </div>
-                  <div style={{height:4,borderRadius:2,background:BOR,overflow:"hidden"}}>
+                  <div style={{height:3,borderRadius:2,background:BOR,overflow:"hidden",marginBottom:1}}>
                     <div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:2,transition:"width 0.5s"}}/>
                   </div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-                    <div style={{fontSize:10,color:MUTED,fontFamily:"monospace"}}>
-                      {s.rate!=null&&<span style={{color:s.rate>=0?UP:DOWN}}>{s.rate>=0?"+":""}{s.rate.toFixed(2)}%</span>}
-                    </div>
-                    <div style={{fontSize:10,color:MUTED,fontFamily:"monospace"}}>
-                      ₩{Math.round(s.value).toLocaleString()}
-                    </div>
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <span style={{fontSize:9,color:s.rate!=null?(s.rate>=0?UP:DOWN):MUTED,fontFamily:"monospace"}}>
+                      {s.rate!=null?`${s.rate>=0?"+":""}${s.rate.toFixed(1)}%`:""}
+                    </span>
+                    <span style={{fontSize:9,color:MUTED,fontFamily:"monospace"}}>₩{Math.round(s.value/10000).toLocaleString()}만</span>
                   </div>
                 </div>
               );
@@ -425,21 +540,7 @@ function HistoryTab({history,accounts,usdKrw}){
             </div>
           </div>
 
-          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"16px",marginBottom:14}}>
-            <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:12}}>기록 내역</div>
-            {[...pts].reverse().map((p,i,arr)=>{
-              const prev=arr[i+1];const diff=prev?p.total-prev.total:null;
-              return(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${BOR}`:"none"}}>
-                  <span style={{fontSize:13,color:MUTED}}>{p.date}</span>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:15,fontFamily:"monospace",fontWeight:700,color:TEXT}}>₩{p.total.toLocaleString()}</div>
-                    {diff!==null&&<div style={{fontSize:11,color:diff>0?UP:diff<0?DOWN:MUTED}}>{diff>0?"+":""}{diff.toLocaleString()}</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <HistoryRecords pts={pts} history={history} onSaveHistory={onSaveHistory}/>
         </>
       ):(
         <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"30px 20px",textAlign:"center",color:MUTED,marginBottom:14}}>
@@ -447,10 +548,11 @@ function HistoryTab({history,accounts,usdKrw}){
           <p style={{fontSize:14,lineHeight:1.8}}>시세 조회를 하면<br/>자동으로 추이가 기록돼요!</p>
         </div>
       )}
+      {pts.length>0&&<HistoryRecords pts={pts} history={history} onSaveHistory={onSaveHistory}/>}
 
       {totalAsset>0&&(
         <>
-          <AllocationSection title="종목별 자산 비중" slices={stockSlices}/>
+          <AllocationSection title="종목별 자산 비중 (상위 10종목)" slices={stockSlices} twoCol={true}/>
           <AllocationSection title="계좌별 자산 비중" slices={accSlices}/>
           <AllocationSection title="섹터별 자산 비중" slices={sectorSlices}/>
         </>
@@ -497,14 +599,16 @@ function StockModal({stock,onClose,onSave,customSectors=[]}){
   );
 }
 
-function StockList({stocks,accId,onReorderStocks,onEditStock,onDeleteStock,confirmDel,setConfirmDel}){
+function StockList({stocks,accId,onReorderStocks,onEditStock,onDeleteStock,onUpdatePrice,confirmDel,setConfirmDel}){
   const drag=useDrag(stocks,onReorderStocks);
+  const[manualInput,setManualInput]=useState(null); // {sid, val}
   return(
     <>
       {stocks.map((s,si)=>{
         const db=drag(si);
         const rate=s.currentPrice&&s.buyPrice?(s.currentPrice-s.buyPrice)/s.buyPrice*100:null;
         const asset=s.currentPrice&&s.qty?s.currentPrice*s.qty:null;
+        const isManual=manualInput?.sid===s.id;
         return(
           <div key={s.id} {...db} style={{...db.style,padding:"12px 16px",borderBottom:`1px solid rgba(36,40,54,.5)`,display:"flex",alignItems:"center",gap:8}}>
             <div style={{flex:1,minWidth:0}}>
@@ -512,14 +616,33 @@ function StockList({stocks,accId,onReorderStocks,onEditStock,onDeleteStock,confi
               <div style={{fontSize:11,color:MUTED,fontFamily:"monospace",display:"flex",gap:6,flexWrap:"wrap"}}>
                 <span>매수 {Number(s.buyPrice).toLocaleString()}</span>
                 {s.qty>0&&<span>{s.qty}주</span>}
-                {s.ticker&&<span style={{color:ACC}}>{s.ticker}</span>}
+                {s.ticker?<span style={{color:ACC}}>{s.ticker}</span>:<span style={{color:"#8b5cf6"}}>비상장</span>}
               </div>
               {asset!=null&&<div style={{fontSize:11,color:ACC,fontFamily:"monospace",marginTop:1}}>평가 {asset.toLocaleString(undefined,{maximumFractionDigits:0})} {s.currency}</div>}
               {s.memo&&<div style={{fontSize:11,color:"#4a5470",marginTop:3,lineHeight:1.5,whiteSpace:"pre-wrap"}}>📝 {s.memo}</div>}
             </div>
             <div style={{textAlign:"right",flexShrink:0,marginRight:8}}>
-              {s.currentPrice?<div style={{fontFamily:"monospace",fontSize:14,fontWeight:700,color:TEXT,marginBottom:3}}>{s.currentPrice.toLocaleString(undefined,{maximumFractionDigits:2})} <span style={{fontSize:10,color:MUTED}}>{s.currency}</span></div>:<div style={{fontSize:12,color:MUTED,marginBottom:3}}>조회 전</div>}
-              {rate!=null?<span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,padding:"2px 7px",borderRadius:5,background:rate>0?"rgba(38,192,106,.15)":"rgba(240,64,96,.15)",color:rate>0?UP:DOWN}}>{rate>0?"+":""}{rate.toFixed(2)}%</span>:<span style={{fontSize:12,padding:"2px 7px",borderRadius:5,background:SUR2,color:MUTED}}>—</span>}
+              {isManual?(
+                <div style={{display:"flex",gap:4,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                  <input
+                    autoFocus
+                    type="number"
+                    value={manualInput.val}
+                    onChange={e=>setManualInput({...manualInput,val:e.target.value})}
+                    onKeyDown={e=>{
+                      if(e.key==="Enter"){onUpdatePrice(s.id,parseFloat(manualInput.val));setManualInput(null);}
+                      if(e.key==="Escape")setManualInput(null);
+                    }}
+                    style={{width:90,background:BG,border:`1px solid ${ACC}`,borderRadius:7,color:TEXT,fontSize:13,padding:"4px 7px",fontFamily:"monospace",outline:"none",textAlign:"right"}}
+                  />
+                  <button onClick={()=>{onUpdatePrice(s.id,parseFloat(manualInput.val));setManualInput(null);}} style={{padding:"4px 8px",borderRadius:7,border:"none",background:ACC,color:"#fff",cursor:"pointer",fontSize:12}}>✓</button>
+                </div>
+              ):(
+                <div onClick={e=>{e.stopPropagation();setManualInput({sid:s.id,val:s.currentPrice||s.buyPrice||""});}}>
+                  {s.currentPrice?<div style={{fontFamily:"monospace",fontSize:14,fontWeight:700,color:TEXT,marginBottom:3}}>{s.currentPrice.toLocaleString(undefined,{maximumFractionDigits:2})} <span style={{fontSize:10,color:MUTED}}>{s.currency}</span></div>:<div style={{fontSize:12,color:"#8b5cf6",marginBottom:3,cursor:"pointer"}}>✎ 직접입력</div>}
+                  {rate!=null?<span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,padding:"2px 7px",borderRadius:5,background:rate>0?"rgba(38,192,106,.15)":"rgba(240,64,96,.15)",color:rate>0?UP:DOWN}}>{rate>0?"+":""}{rate.toFixed(2)}%</span>:<span style={{fontSize:12,padding:"2px 7px",borderRadius:5,background:SUR2,color:MUTED}}>—</span>}
+                </div>
+              )}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
               {confirmDel?.sid===s.id?(
@@ -670,6 +793,7 @@ function OCRModal({accounts,onClose,onImport}){
 function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
   const[showAdd,setShowAdd]=useState(false);
   const[showOCR,setShowOCR]=useState(false);
+  const[cashEdit,setCashEdit]=useState(null); // {accId, val}
   const[newName,setNewName]=useState("");
   const[expanded,setExpanded]=useState(null);
   const[stockModal,setStockModal]=useState(null);
@@ -682,7 +806,11 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
   const customSectors=[...new Set(accounts.flatMap(a=>(a.stocks||[]).map(s=>s.sector)).filter(s=>s&&!DEFAULT_SECTORS.includes(s)))];
   const accDrag=useDrag(accounts,setAccounts);
 
-  function addAcc(){if(!newName.trim())return;setAccounts([...accounts,{id:makeId(),name:newName.trim(),stocks:[]}]);setNewName("");setShowAdd(false);showToast("계좌 추가됐어요 ✓");}
+  function addAcc(){if(!newName.trim())return;setAccounts([...accounts,{id:makeId(),name:newName.trim(),stocks:[],cash:null,cashCurrency:"KRW"}]);setNewName("");setShowAdd(false);showToast("계좌 추가됐어요 ✓");}
+  function saveCash(accId,val,currency){
+    setAccounts(accounts.map(a=>a.id===accId?{...a,cash:parseFloat(val)||null,cashCurrency:currency||"KRW"}:a));
+    setCashEdit(null);showToast("예수금 저장됐어요 ✓");
+  }
   function delAcc(id){setAccounts(accounts.filter(a=>a.id!==id));setConfirmDel(null);showToast("계좌 삭제됐어요");}
   function renameAcc(id,name){if(!name.trim())return;setAccounts(accounts.map(a=>a.id===id?{...a,name:name.trim()}:a));setEditAccId(null);showToast("계좌명 수정됐어요 ✓");}
 
@@ -699,6 +827,12 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
     setAccounts(accounts.map(a=>a.id===accId?{...a,stocks:newStocks}:a));
   }
 
+  function updateStockPrice(accId,sid,price){
+    if(!price||isNaN(price))return;
+    setAccounts(accounts.map(a=>a.id!==accId?a:{...a,stocks:(a.stocks||[]).map(s=>s.id===sid?{...s,currentPrice:price}:s)}));
+    showToast("현재가 업데이트됐어요 ✓");
+  }
+
   function deleteStock(accId,sid){
     setAccounts(accounts.map(a=>a.id!==accId?a:{...a,stocks:(a.stocks||[]).filter(s=>s.id!==sid)}));
     setConfirmDel(null);showToast("삭제됐어요");
@@ -706,7 +840,8 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
 
   const inp={background:BG,border:`1px solid ${BOR}`,borderRadius:10,color:TEXT,fontSize:15,padding:"11px 14px",width:"100%",fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
   const allS=accounts.flatMap(a=>a.stocks||[]);
-  const tot=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
+  const cashTot=accounts.reduce((a,acc)=>acc.cash?a+toKrw(acc.cash,acc.cashCurrency||"KRW"):a,0);
+  const tot=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0)+cashTot;
   const buy=allS.reduce((a,s)=>s.buyPrice&&s.qty?a+toKrw(s.buyPrice*s.qty,s.currency||"KRW"):a,0);
   const pnl=tot-buy,pr=buy>0?pnl/buy*100:0;
 
@@ -759,6 +894,7 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:16,fontFamily:"monospace",fontWeight:700,color:TEXT}}>{aT>0?"₩"+Math.round(aT).toLocaleString():"—"}</div>
                 {aT>0&&<div style={{fontSize:12,color:aPnl>=0?UP:DOWN}}>{aPnl>=0?"+":""}{aR.toFixed(2)}%</div>}
+                {acc.cash!=null&&<div style={{fontSize:11,color:MUTED,marginTop:2}}>예수금 {acc.cashCurrency==="USD"?"$":"₩"}{acc.cash.toLocaleString()}</div>}
               </div>
               <span style={{color:MUTED,fontSize:14,marginLeft:4}}>{open?"▲":"▼"}</span>
             </div>
@@ -771,11 +907,13 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
                   onReorderStocks={(ns)=>reorderStocks(acc.id,ns)}
                   onEditStock={(s)=>setStockModal({accId:acc.id,stock:s})}
                   onDeleteStock={(sid)=>deleteStock(acc.id,sid)}
+                  onUpdatePrice={(sid,price)=>updateStockPrice(acc.id,sid,price)}
                   confirmDel={confirmDel}
                   setConfirmDel={setConfirmDel}
                 />
-                <div style={{padding:"12px 16px",display:"flex",gap:8}}>
+                <div style={{padding:"12px 16px",display:"flex",gap:8,flexWrap:"wrap"}}>
                   <button onClick={()=>setStockModal({accId:acc.id})} style={{flex:1,padding:"10px",borderRadius:10,background:ACC,border:"none",color:"#fff",fontSize:13,cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>+ 종목 추가</button>
+                  <button onClick={()=>setCashEdit({accId:acc.id,val:acc.cash||"",currency:acc.cashCurrency||"KRW"})} style={{padding:"10px 12px",borderRadius:10,background:SUR2,border:`1px solid ${BOR}`,color:MUTED,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>💰 예수금</button>
                   {confirmDel?.aid===acc.id?(
                     <><button onClick={()=>delAcc(acc.id)} style={{padding:"10px 14px",borderRadius:10,border:"none",background:DOWN,color:"#fff",cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"inherit"}}>삭제확인</button><button onClick={()=>setConfirmDel(null)} style={{padding:"10px 14px",borderRadius:10,border:`1px solid ${BOR}`,background:SUR2,color:MUTED,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>취소</button></>
                   ):(
@@ -1061,7 +1199,7 @@ export default function App(){
           {tab!=="admin"&&<TabBar tab={tab} setTab={setTab}/>}
         </div>
         {tab==="dash"&&<DashTab accounts={accounts} usdKrw={usdKrw} setUsdKrw={setUsdKrw} onRefresh={refresh} loading={loading} updated={updated} marketItems={marketItems} setMarketItems={setMarketItems}/>}
-        {tab==="history"&&<HistoryTab history={history} accounts={accounts} usdKrw={usdKrw}/>}
+        {tab==="history"&&<HistoryTab history={history} accounts={accounts} usdKrw={usdKrw} onSaveHistory={saveHistory}/>}
         {tab==="chart"&&<ChartTab accounts={accounts}/>}
         {tab==="accounts"&&<AccountsTab accounts={accounts} setAccounts={setAccounts} usdKrw={usdKrw} onRefresh={refresh} loading={loading}/>}
         {tab==="admin"&&session.user.isAdmin&&<AdminTab/>}
