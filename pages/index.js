@@ -202,26 +202,6 @@ function MarketBar({usdKrw,setUsdKrw,marketItems,setMarketItems}){
         })}
       </div>
 
-      {cashEdit&&(
-        <div onClick={e=>e.target===e.currentTarget&&setCashEdit(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
-          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
-            <div style={{fontSize:17,fontWeight:700,marginBottom:16}}>💰 예수금 입력</div>
-            <div style={{fontSize:11,color:MUTED,marginBottom:6}}>금액</div>
-            <input style={inp} type="number" value={cashEdit.val} onChange={e=>setCashEdit({...cashEdit,val:e.target.value})} placeholder="0" autoFocus/>
-            <div style={{fontSize:11,color:MUTED,marginBottom:6,marginTop:12}}>통화</div>
-            <div style={{display:"flex",gap:8,marginBottom:16}}>
-              {["KRW","USD","JPY"].map(c=>(
-                <button key={c} onClick={()=>setCashEdit({...cashEdit,currency:c})} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${cashEdit.currency===c?ACC:BOR}`,background:cashEdit.currency===c?"rgba(79,142,247,.15)":SUR2,color:cashEdit.currency===c?ACC:MUTED,cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"inherit"}}>{c}</button>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={()=>setCashEdit(null)} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:15,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
-              <button onClick={()=>saveCash(cashEdit.accId,cashEdit.val,cashEdit.currency)} style={{flex:2,padding:13,borderRadius:12,background:ACC,border:"none",color:"#fff",fontSize:15,cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>저장하기</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showAdd&&(
         <div onClick={e=>e.target===e.currentTarget&&setShowAdd(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
           <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
@@ -951,6 +931,25 @@ function AccountsTab({accounts,setAccounts,usdKrw,onRefresh,loading}){
         setShowOCR(false);
         showToast(`${stocks.length}개 종목이 추가됐어요 ✓`);
       }}/>}
+      {cashEdit&&(
+        <div onClick={e=>e.target===e.currentTarget&&setCashEdit(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:300}}>
+          <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:"20px 20px 0 0",padding:"22px 20px 36px",width:"100%",maxWidth:480}}>
+            <div style={{fontSize:17,fontWeight:700,marginBottom:16}}>💰 예수금 입력</div>
+            <div style={{fontSize:11,color:MUTED,marginBottom:6}}>금액</div>
+            <input style={inp} type="number" value={cashEdit.val} onChange={e=>setCashEdit({...cashEdit,val:e.target.value})} placeholder="0" autoFocus/>
+            <div style={{fontSize:11,color:MUTED,marginBottom:6,marginTop:12}}>통화</div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              {["KRW","USD","JPY"].map(c=>(
+                <button key={c} onClick={()=>setCashEdit({...cashEdit,currency:c})} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${cashEdit.currency===c?ACC:BOR}`,background:cashEdit.currency===c?"rgba(79,142,247,.15)":SUR2,color:cashEdit.currency===c?ACC:MUTED,cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"inherit"}}>{c}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setCashEdit(null)} style={{flex:1,padding:13,borderRadius:12,background:SUR2,border:`1px solid ${BOR}`,color:TEXT,fontSize:15,cursor:"pointer",fontFamily:"inherit"}}>취소</button>
+              <button onClick={()=>saveCash(cashEdit.accId,cashEdit.val,cashEdit.currency)} style={{flex:2,padding:13,borderRadius:12,background:ACC,border:"none",color:"#fff",fontSize:15,cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>저장하기</button>
+            </div>
+          </div>
+        </div>
+      )}
       <Toast msg={toast}/>
     </div>
   );
