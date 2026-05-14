@@ -482,12 +482,12 @@ function HistoryTab({history,accounts,usdKrw,onSaveHistory}){
                   <div style={{height:4,borderRadius:2,background:BOR,overflow:"hidden",marginBottom:2}}>
                     <div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:2,transition:"width 0.5s"}}/>
                   </div>
-                  {(showAmt||s.rate!=null)&&(
+                  {showAmt&&(
                     <div style={{display:"flex",justifyContent:"space-between"}}>
                       <span style={{fontSize:10,color:s.rate!=null?(s.rate>=0?UP:DOWN):MUTED,fontFamily:"monospace"}}>
                         {s.rate!=null?`${s.rate>=0?"+":""}${s.rate.toFixed(1)}%`:""}
                       </span>
-                      {showAmt&&<span style={{fontSize:10,color:MUTED,fontFamily:"monospace"}}>₩{Math.round(s.value/10000).toLocaleString()}만</span>}
+                      <span style={{fontSize:10,color:MUTED,fontFamily:"monospace"}}>₩{Math.round(s.value/10000).toLocaleString()}만</span>
                     </div>
                   )}
                 </div>
