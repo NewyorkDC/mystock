@@ -457,31 +457,39 @@ function HistoryTab({history,accounts,usdKrw,onSaveHistory}){
   // 비중 섹션 공통 렌더러
   function AllocationSection({title,slices,twoCol=false}){
     if(!slices.length)return null;
+    const[showAmt,setShowAmt]=useState(false);
     const tot=slices.reduce((a,x)=>a+x.value,0);
     return(
       <div style={{background:SUR,border:`1px solid ${BOR}`,borderRadius:16,padding:"18px 16px",marginBottom:12}}>
-        <div style={{fontSize:13,fontWeight:700,color:MUTED,marginBottom:16}}>{title}</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <span style={{fontSize:14,fontWeight:700,color:MUTED}}>{title}</span>
+          <button onClick={()=>setShowAmt(v=>!v)} style={{fontSize:11,padding:"3px 10px",borderRadius:20,border:`1px solid ${showAmt?ACC:BOR}`,background:showAmt?"rgba(79,142,247,.15)":SUR2,color:showAmt?ACC:MUTED,cursor:"pointer",fontFamily:"inherit"}}>
+            {showAmt?"금액 ON":"금액 OFF"}
+          </button>
+        </div>
         <div style={{display:"flex",alignItems:"flex-start",gap:16}}>
           <div style={{flexShrink:0}}><PieChart slices={slices} size={130}/></div>
-          <div style={{flex:1,display:"grid",gridTemplateColumns:twoCol?"1fr 1fr":"1fr",gap:"6px 10px"}}>
+          <div style={{flex:1,display:"grid",gridTemplateColumns:twoCol?"1fr 1fr":"1fr",gap:"8px 12px"}}>
             {slices.map((s,i)=>{
               const pct=(s.value/tot*100).toFixed(1);
               return(
                 <div key={i}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:s.color,flexShrink:0}}/>
-                    <span style={{fontSize:11,color:TEXT,flex:1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.label}</span>
-                    <span style={{fontSize:11,fontFamily:"monospace",fontWeight:700,color:TEXT,flexShrink:0}}>{pct}%</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                    <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                    <span style={{fontSize:12,color:TEXT,flex:1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.label}</span>
+                    <span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:TEXT,flexShrink:0}}>{pct}%</span>
                   </div>
-                  <div style={{height:3,borderRadius:2,background:BOR,overflow:"hidden",marginBottom:1}}>
+                  <div style={{height:4,borderRadius:2,background:BOR,overflow:"hidden",marginBottom:2}}>
                     <div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:2,transition:"width 0.5s"}}/>
                   </div>
-                  <div style={{display:"flex",justifyContent:"space-between"}}>
-                    <span style={{fontSize:9,color:s.rate!=null?(s.rate>=0?UP:DOWN):MUTED,fontFamily:"monospace"}}>
-                      {s.rate!=null?`${s.rate>=0?"+":""}${s.rate.toFixed(1)}%`:""}
-                    </span>
-                    <span style={{fontSize:9,color:MUTED,fontFamily:"monospace"}}>₩{Math.round(s.value/10000).toLocaleString()}만</span>
-                  </div>
+                  {(showAmt||s.rate!=null)&&(
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <span style={{fontSize:10,color:s.rate!=null?(s.rate>=0?UP:DOWN):MUTED,fontFamily:"monospace"}}>
+                        {s.rate!=null?`${s.rate>=0?"+":""}${s.rate.toFixed(1)}%`:""}
+                      </span>
+                      {showAmt&&<span style={{fontSize:10,color:MUTED,fontFamily:"monospace"}}>₩{Math.round(s.value/10000).toLocaleString()}만</span>}
+                    </div>
+                  )}
                 </div>
               );
             })}
