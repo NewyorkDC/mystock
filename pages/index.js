@@ -1014,183 +1014,170 @@ function ChartCard({stock}){
 
 function LiveTab({accounts,usdKrw,onRefresh,loading}){
   const[mktData,setMktData]=useState({});
+  const[prices,setPrices]=useState({});
   const[mktLoading,setMktLoading]=useState(false);
   const[lastUpdate,setLastUpdate]=useState("");
   const toKrw=(v,c)=>c==="USD"?v*usdKrw:v;
   const allS=accounts.flatMap(a=>a.stocks||[]);
   const totalAsset=allS.reduce((a,s)=>s.currentPrice&&s.qty?a+toKrw(s.currentPrice*s.qty,s.currency||"KRW"):a,0);
   const totalBuy=allS.reduce((a,s)=>s.buyPrice&&s.qty?a+toKrw(s.buyPrice*s.qty,s.currency||"KRW"):a,0);
-  const profit=totalAsset-totalBuy,rate=totalBuy>0?profit/totalBuy*100:0;
+  const profit=totalAsset-totalBuy,profitRate=totalBuy>0?profit/totalBuy*100:0;
   const cashTotal=accounts.reduce((a,acc)=>acc.cash?a+toKrw(acc.cash,acc.cashCurrency||"KRW"):a,0);
   const grandTotal=totalAsset+cashTotal;
 
-  const GRID_TICKERS=[
+  const LEFT_TICKERS=[
     {label:"TQQQ",ticker:"TQQQ",color:"#00ff88"},
-    {label:"QQQ",ticker:"QQQ",color:"#ffdd00"},
-    {label:"SMA200",ticker:"SPY",color:"#ff6b6b"},
-    {label:"SPY",ticker:"SPY",color:"#4fc3f7"},
-    {label:"GLD",ticker:"GLD",color:"#ffd700"},
-    {label:"TLT",ticker:"TLT",color:"#ce93d8"},
-    {label:"SOXX",ticker:"SOXX",color:"#80deea"},
-    {label:"NVDA",ticker:"NVDA",color:"#76ff03"},
-    {label:"GOOGL",ticker:"GOOGL",color:"#4fc3f7"},
-    {label:"AAPL",ticker:"AAPL",color:"#f48fb1"},
-    {label:"MSFT",ticker:"MSFT",color:"#80cbc4"},
-    {label:"AMZN",ticker:"AMZN",color:"#ffcc02"},
-    {label:"META",ticker:"META",color:"#64b5f6"},
-    {label:"TSLA",ticker:"TSLA",color:"#ff4081"},
-    {label:"AMD",ticker:"AMD",color:"#ff9800"},
-    {label:"AVGO",ticker:"AVGO",color:"#b39ddb"},
+    {label:"QQQ", ticker:"QQQ", color:"#ffdd00"},
+    {label:"SPY",  ticker:"SPY", color:"#ff6b6b"},
+    {label:"GLD",  ticker:"GLD", color:"#ffd700"},
+    {label:"TLT",  ticker:"TLT", color:"#ce93d8"},
+    {label:"SOXX", ticker:"SOXX",color:"#64b5f6"},
+    {label:"SOXL", ticker:"SOXL",color:"#80deea"},
+    {label:"TQQQ", ticker:"TQQQ",color:"#00ff88"},
+  ];
+  const RIGHT_TICKERS=[
+    {label:"NVDA", sub:"엔비디아",ticker:"NVDA",color:"#76ff03"},
+    {label:"GOOGL",sub:"구글",    ticker:"GOOGL",color:"#4fc3f7"},
+    {label:"AAPL", sub:"애플",    ticker:"AAPL", color:"#f48fb1"},
+    {label:"MSFT", sub:"MS",      ticker:"MSFT", color:"#80cbc4"},
+    {label:"AMZN", sub:"아마존",  ticker:"AMZN", color:"#ffcc02"},
+    {label:"AVGO", sub:"브로드컴",ticker:"AVGO", color:"#b39ddb"},
+    {label:"META", sub:"메타",    ticker:"META", color:"#64b5f6"},
+    {label:"TSLA", sub:"테슬라",  ticker:"TSLA", color:"#ff4081"},
+    {label:"AMD",  sub:"AMD",     ticker:"AMD",  color:"#ff9800"},
   ];
 
   async function fetchAll(){
     setMktLoading(true);
     try{
-      // 시장 데이터
       const mRes=await fetch("/api/market");
       if(mRes.ok){const d=await mRes.json();setMktData(d);}
-      // 그리드 종목 시세
-      const pRes=await fetch("/api/prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tickers:GRID_TICKERS.map(t=>({ticker:t.ticker,isKR:false})),fetchRate:false})});
+      const allTickers=[...new Set([...LEFT_TICKERS,...RIGHT_TICKERS].map(t=>t.ticker))];
+      const pRes=await fetch("/api/prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tickers:allTickers.map(t=>({ticker:t,isKR:false})),fetchRate:false})});
       if(pRes.ok){
         const d=await pRes.json();
         const map={};
         d.prices?.forEach(p=>{if(p.price)map[p.ticker]={price:p.price,changePercent:p.changePercent};});
-        setMktData(prev=>({...prev,...map}));
+        setPrices(map);
       }
       const now=new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
       setLastUpdate(now);
     }catch(e){console.error(e);}
     setMktLoading(false);
   }
-
   useEffect(()=>{fetchAll();},[]);
 
   const today=new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
+  const BK="#0a0c10",CARD="rgba(255,255,255,.04)",BORDER="rgba(255,255,255,.08)";
 
-  function MktCell({label,ticker,color,value,change,up}){
-    const d=mktData[ticker]||{};
-    const price=d.price||value;
-    const pct=d.changePercent!=null?d.changePercent:(up!=null?parseFloat(change):null);
-    const isUp=pct!=null?pct>=0:up;
+  function PriceCell({label,sub,ticker,color}){
+    const d=prices[ticker]||{};
+    const pct=d.changePercent;
     return(
-      <div style={{background:"rgba(0,0,0,.6)",border:`1px solid ${color}33`,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-        <div style={{fontSize:10,color:color,fontWeight:700,marginBottom:3,letterSpacing:1}}>{label}</div>
-        <div style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>
-          {price?(`${typeof price==="number"?price.toLocaleString(undefined,{maximumFractionDigits:2}):price}`):value||"—"}
+      <div style={{background:CARD,border:"1px solid "+color+"30",borderRadius:6,padding:"7px 6px",textAlign:"center",minWidth:0}}>
+        <div style={{fontSize:9,color:color,fontWeight:800,letterSpacing:1,marginBottom:1}}>{label}</div>
+        {sub&&<div style={{fontSize:8,color:"#555",marginBottom:2}}>{sub}</div>}
+        <div style={{fontSize:12,fontFamily:"monospace",fontWeight:800,color:"#fff",lineHeight:1.2}}>
+          {d.price?"$"+d.price.toLocaleString(undefined,{maximumFractionDigits:2}):"—"}
         </div>
-        {pct!=null&&<div style={{fontSize:10,fontFamily:"monospace",color:pct>=0?"#00ff88":"#ff4444"}}>{pct>=0?"+":""}{pct.toFixed(2)}%</div>}
-        {pct==null&&change&&<div style={{fontSize:10,fontFamily:"monospace",color:isUp?"#00ff88":"#ff4444"}}>{change}</div>}
+        {pct!=null&&<div style={{fontSize:9,fontFamily:"monospace",fontWeight:700,color:pct>=0?"#00ff88":"#ff4444",marginTop:1}}>{pct>=0?"+":""}{pct.toFixed(2)}%</div>}
+      </div>
+    );
+  }
+
+  function MktCell({label,value,change,up,color}){
+    color=color||"#aaa";
+    return(
+      <div style={{background:CARD,border:"1px solid "+BORDER,borderRadius:6,padding:"7px 6px",textAlign:"center"}}>
+        <div style={{fontSize:9,color:color,fontWeight:700,letterSpacing:1,marginBottom:3}}>{label}</div>
+        <div style={{fontSize:11,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>{value||"—"}</div>
+        {change&&<div style={{fontSize:9,fontFamily:"monospace",color:up?"#00ff88":"#ff4444",marginTop:1}}>{change}</div>}
+        {!change&&<div style={{fontSize:8,color:"#333"}}>—</div>}
       </div>
     );
   }
 
   return(
-    <div style={{background:"#000",minHeight:"100vh",padding:"12px",fontFamily:"'Noto Sans KR',monospace",color:"#fff"}}>
-      <style>{".live-scroll::-webkit-scrollbar{display:none}"}</style>
-
-      {/* 헤더 */}
+    <div style={{background:BK,minHeight:"100vh",padding:"10px 12px 40px",fontFamily:"'Noto Sans KR',monospace",color:"#fff"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontSize:13,color:"#00ff88",fontWeight:800,letterSpacing:2}}>MY STOCK</div>
-        <div style={{fontSize:12,color:"#aaa"}}>{today}</div>
-        <div style={{display:"flex",gap:6}}>
-          <div style={{fontSize:11,padding:"3px 10px",borderRadius:4,border:"1px solid #00ff88",color:"#00ff88",fontWeight:700}}>LONG</div>
-          <button onClick={()=>{fetchAll();onRefresh();}} disabled={mktLoading||loading} style={{fontSize:11,padding:"3px 10px",borderRadius:4,border:"1px solid #555",color:"#aaa",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>
+        <div style={{fontSize:13,color:"#00ff88",fontWeight:800,letterSpacing:3,fontFamily:"monospace"}}>MY STOCK</div>
+        <div style={{fontSize:10,color:"#555"}}>{today}</div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{fontSize:10,padding:"2px 9px",borderRadius:3,border:"1px solid #00ff88",color:"#00ff88",fontWeight:800,letterSpacing:2}}>LONG</div>
+          <button onClick={()=>{fetchAll();onRefresh();}} disabled={mktLoading||loading} style={{fontSize:11,padding:"3px 7px",borderRadius:4,border:"1px solid #333",color:"#555",background:"transparent",cursor:"pointer",fontFamily:"inherit"}}>
             <span style={(mktLoading||loading)?{display:"inline-block",animation:"spin 1s linear infinite"}:{}}>↻</span>
           </button>
         </div>
       </div>
 
-      {/* 총 자산 */}
-      <div style={{background:"rgba(0,255,136,.05)",border:"1px solid #00ff8844",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
-        <div style={{fontSize:10,color:"#666",marginBottom:4,letterSpacing:1}}>총 평가금액</div>
-        <div style={{fontSize:28,fontWeight:800,color:"#00ff88",fontFamily:"monospace"}}>
-          ₩{grandTotal>0?Math.round(grandTotal).toLocaleString():"—"}
-        </div>
-        {totalBuy>0&&<div style={{fontSize:12,color:profit>=0?"#00ff88":"#ff4444",fontFamily:"monospace",marginTop:2}}>{profit>=0?"+":""}{rate.toFixed(2)}%</div>}
-        {lastUpdate&&<div style={{fontSize:10,color:"#444",marginTop:4}}>업데이트 {lastUpdate}</div>}
-      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          <div style={{background:"rgba(0,255,136,.06)",border:"1px solid #00ff8830",borderRadius:8,padding:"11px 13px"}}>
+            <div style={{fontSize:9,color:"#00ff8877",letterSpacing:2,marginBottom:3}}>총 평가금액</div>
+            <div style={{fontSize:20,fontWeight:800,color:"#00ff88",fontFamily:"monospace",lineHeight:1.1}}>
+              {grandTotal>0?"₩"+Math.round(grandTotal).toLocaleString():"₩ —"}
+            </div>
+            {totalBuy>0&&<div style={{fontSize:11,color:profit>=0?"#00ff88":"#ff4444",fontFamily:"monospace",marginTop:3,fontWeight:700}}>
+              {profit>=0?"+":""}{profitRate.toFixed(2)}%
+            </div>}
+            {lastUpdate&&<div style={{fontSize:8,color:"#333",marginTop:3}}>{lastUpdate}</div>}
+          </div>
 
-      {/* 보유 포지션 */}
-      {allS.filter(s=>s.currentPrice&&s.qty).length>0&&(
-        <div style={{background:"rgba(0,0,0,.6)",border:"1px solid #222",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
-          <div style={{fontSize:10,color:"#666",marginBottom:8,letterSpacing:1}}>포지션</div>
-          {allS.filter(s=>s.currentPrice&&s.qty).map((s,i)=>{
-            const val=toKrw(s.currentPrice*s.qty,s.currency||"KRW");
-            const pct=grandTotal>0?val/grandTotal*100:0;
-            const r=s.buyPrice?(s.currentPrice-s.buyPrice)/s.buyPrice*100:null;
-            return(
-              <div key={i} style={{marginBottom:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                  <span style={{fontSize:12,color:"#00ff88",fontWeight:700}}>{s.ticker||s.name}</span>
-                  <span style={{fontSize:11,color:"#aaa",fontFamily:"monospace"}}>{s.qty}주 · ₩{Math.round(val).toLocaleString()}</span>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+            {LEFT_TICKERS.map((t,i)=><PriceCell key={i} {...t}/>)}
+          </div>
+
+          {allS.filter(s=>s.currentPrice&&s.qty).length>0&&(
+            <div style={{background:CARD,border:"1px solid "+BORDER,borderRadius:8,padding:"9px 11px"}}>
+              <div style={{fontSize:9,color:"#444",letterSpacing:2,marginBottom:7}}>포지션</div>
+              {allS.filter(s=>s.currentPrice&&s.qty).map((s,i)=>{
+                const val=toKrw(s.currentPrice*s.qty,s.currency||"KRW");
+                const pct=grandTotal>0?val/grandTotal*100:0;
+                const r=s.buyPrice?(s.currentPrice-s.buyPrice)/s.buyPrice*100:null;
+                return(
+                  <div key={i} style={{marginBottom:6}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                      <span style={{fontSize:10,color:"#00ff88",fontWeight:700,fontFamily:"monospace"}}>{s.ticker||s.name}</span>
+                      <span style={{fontSize:8,color:"#555",fontFamily:"monospace"}}>{s.qty}주 · ₩{Math.round(val/10000).toLocaleString()}만</span>
+                    </div>
+                    <div style={{height:3,background:"#111",borderRadius:2,overflow:"hidden",marginBottom:2}}>
+                      <div style={{height:"100%",width:Math.min(pct,100)+"%",background:"#00ff88",borderRadius:2}}/>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <span style={{fontSize:8,color:"#333",fontFamily:"monospace"}}>{pct.toFixed(1)}%</span>
+                      {r!=null&&<span style={{fontSize:8,color:r>=0?"#00ff88":"#ff4444",fontFamily:"monospace"}}>{r>=0?"+":""}{r.toFixed(2)}%</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {cashTotal>0&&(
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                    <span style={{fontSize:10,color:"#444",fontFamily:"monospace"}}>CASH</span>
+                    <span style={{fontSize:8,color:"#333",fontFamily:"monospace"}}>₩{Math.round(cashTotal/10000).toLocaleString()}만</span>
+                  </div>
+                  <div style={{height:3,background:"#111",borderRadius:2,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:Math.min(grandTotal>0?cashTotal/grandTotal*100:0,100)+"%",background:"#444",borderRadius:2}}/>
+                  </div>
                 </div>
-                <div style={{height:3,background:"#111",borderRadius:2,overflow:"hidden",marginBottom:2}}>
-                  <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:"#00ff88",borderRadius:2}}/>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between"}}>
-                  <span style={{fontSize:9,color:"#555"}}>{pct.toFixed(1)}%</span>
-                  {r!=null&&<span style={{fontSize:9,color:r>=0?"#00ff88":"#ff4444",fontFamily:"monospace"}}>{r>=0?"+":""}{r.toFixed(2)}%</span>}
-                </div>
-              </div>
-            );
-          })}
-          {cashTotal>0&&(
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontSize:12,color:"#888",fontWeight:700}}>CASH</span>
-                <span style={{fontSize:11,color:"#aaa",fontFamily:"monospace"}}>₩{Math.round(cashTotal).toLocaleString()}</span>
-              </div>
-              <div style={{height:3,background:"#111",borderRadius:2,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${Math.min(grandTotal>0?cashTotal/grandTotal*100:0,100)}%`,background:"#555",borderRadius:2}}/>
-              </div>
+              )}
             </div>
           )}
         </div>
-      )}
 
-      {/* 시장 지표 */}
-      <div style={{background:"rgba(0,0,0,.6)",border:"1px solid #222",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
-        <div style={{fontSize:10,color:"#666",marginBottom:8,letterSpacing:1}}>시장 지표</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-          {mktData.kospi&&<div style={{background:"rgba(0,0,0,.6)",border:"1px solid #333",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-            <div style={{fontSize:10,color:"#ffdd00",fontWeight:700,marginBottom:3,letterSpacing:1}}>KOSPI</div>
-            <div style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>{mktData.kospi.value}</div>
-            {mktData.kospi.change&&<div style={{fontSize:10,fontFamily:"monospace",color:mktData.kospi.up?"#00ff88":"#ff4444"}}>{mktData.kospi.change}</div>}
-          </div>}
-          {mktData.nasdaq&&<div style={{background:"rgba(0,0,0,.6)",border:"1px solid #333",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-            <div style={{fontSize:10,color:"#4fc3f7",fontWeight:700,marginBottom:3,letterSpacing:1}}>NASDAQ</div>
-            <div style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>{mktData.nasdaq.value}</div>
-            {mktData.nasdaq.change&&<div style={{fontSize:10,fontFamily:"monospace",color:mktData.nasdaq.up?"#00ff88":"#ff4444"}}>{mktData.nasdaq.change}</div>}
-          </div>}
-          {mktData.usdkrw&&<div style={{background:"rgba(0,0,0,.6)",border:"1px solid #333",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-            <div style={{fontSize:10,color:"#ce93d8",fontWeight:700,marginBottom:3,letterSpacing:1}}>원/달러</div>
-            <div style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>{mktData.usdkrw.value}</div>
-            {mktData.usdkrw.change&&<div style={{fontSize:10,fontFamily:"monospace",color:mktData.usdkrw.up?"#00ff88":"#ff4444"}}>{mktData.usdkrw.change}</div>}
-          </div>}
-          {mktData.oil&&<div style={{background:"rgba(0,0,0,.6)",border:"1px solid #333",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-            <div style={{fontSize:10,color:"#ff9800",fontWeight:700,marginBottom:3,letterSpacing:1}}>WTI</div>
-            <div style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>{mktData.oil.value}</div>
-            {mktData.oil.change&&<div style={{fontSize:10,fontFamily:"monospace",color:mktData.oil.up?"#00ff88":"#ff4444"}}>{mktData.oil.change}</div>}
-          </div>}
-        </div>
-      </div>
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
+            <MktCell label="VIX" value={prices["VIX"]?prices["VIX"].price?.toFixed(2):null} change={prices["VIX"]?.changePercent!=null?(prices["VIX"].changePercent>=0?"+":"")+prices["VIX"].changePercent.toFixed(2)+"%":null} up={prices["VIX"]?.changePercent>=0} color="#ff6b6b"/>
+            <MktCell label="KOSPI" value={mktData.kospi?.value} change={mktData.kospi?.change} up={mktData.kospi?.up} color="#ffdd00"/>
+            <MktCell label="DXY" value={prices["DXY"]?.price?.toFixed(2)} change={prices["DXY"]?.changePercent!=null?(prices["DXY"].changePercent>=0?"+":"")+prices["DXY"].changePercent.toFixed(2)+"%":null} up={prices["DXY"]?.changePercent>=0} color="#ce93d8"/>
+            <MktCell label="원/달러" value={mktData.usdkrw?.value} change={mktData.usdkrw?.change} up={mktData.usdkrw?.up} color="#80cbc4"/>
+            <MktCell label="WTI" value={mktData.oil?.value} change={mktData.oil?.change} up={mktData.oil?.up} color="#ff9800"/>
+            <MktCell label="NASDAQ" value={mktData.nasdaq?.value} change={mktData.nasdaq?.change} up={mktData.nasdaq?.up} color="#4fc3f7"/>
+          </div>
 
-      {/* 종목 그리드 */}
-      <div style={{background:"rgba(0,0,0,.6)",border:"1px solid #222",borderRadius:10,padding:"10px 12px"}}>
-        <div style={{fontSize:10,color:"#666",marginBottom:8,letterSpacing:1}}>주요 종목</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-          {GRID_TICKERS.map(t=>{
-            const d=mktData[t.ticker]||{};
-            return(
-              <div key={t.ticker} style={{background:"rgba(0,0,0,.6)",border:`1px solid ${t.color}33`,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
-                <div style={{fontSize:10,color:t.color,fontWeight:700,marginBottom:3,letterSpacing:1}}>{t.label}</div>
-                <div style={{fontSize:13,fontFamily:"monospace",fontWeight:800,color:"#fff"}}>
-                  {d.price?`${d.price.toLocaleString(undefined,{maximumFractionDigits:2})}`:"—"}
-                </div>
-                {d.changePercent!=null&&<div style={{fontSize:10,fontFamily:"monospace",color:d.changePercent>=0?"#00ff88":"#ff4444"}}>{d.changePercent>=0?"+":""}{d.changePercent.toFixed(2)}%</div>}
-              </div>
-            );
-          })}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
+            {RIGHT_TICKERS.map((t,i)=><PriceCell key={i} {...t}/>)}
+          </div>
         </div>
       </div>
     </div>
